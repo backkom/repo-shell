@@ -731,20 +731,35 @@ final class TaskProgressModel: ObservableObject {
         succeeded = nil
         outputLines = []
         task = Task {
+            let tracker = StreamTracker()
             do {
                 let res = try await operation { line in
+                    tracker.markStreamed()
                     Task { @MainActor in
                         self.outputLines.append(line)
                     }
                 }
-                if !res.stdout.isEmpty { outputLines.append(res.stdout) }
-                if !res.stderr.isEmpty { outputLines.append(res.stderr) }
+                if !tracker.didStream {
+                    if !res.stdout.isEmpty { outputLines.append(res.stdout) }
+                    if !res.stderr.isEmpty { outputLines.append(res.stderr) }
+                }
                 outputLines.append(L("Completed successfully.", "操作已完成。"))
                 succeeded = true
                 isRunning = false
                 if let repo = repoPath {
                     AppContainer.shared.triggerRefresh(repoPath: repo)
                 }
+            } catch let err as VcsError {
+                if case .commandFailed(let cmd, let code, let stderr, _) = err {
+                    if !tracker.didStream && !stderr.isEmpty {
+                        outputLines.append(stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                    outputLines.append("Command failed (\(code)): \(cmd)")
+                } else {
+                    outputLines.append(err.localizedDescription)
+                }
+                succeeded = false
+                isRunning = false
             } catch {
                 outputLines.append(error.localizedDescription)
                 succeeded = false
@@ -753,10 +768,24 @@ final class TaskProgressModel: ObservableObject {
         }
     }
 
+    var isLocalNetworkError: Bool {
+        let joined = outputLines.joined(separator: "\n")
+        return joined.contains("Couldn't connect to server")
+            || joined.contains("No route to host")
+            || joined.contains("Failed to connect to")
+    }
+
     func cancel() {
         task?.cancel()
         isRunning = false
     }
+}
+
+private final class StreamTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var streamed = false
+    func markStreamed() { lock.withLock { streamed = true } }
+    var didStream: Bool { lock.withLock { streamed } }
 }
 
 struct TaskProgressWindowView: View {
@@ -789,6 +818,28 @@ struct TaskProgressWindowView: View {
             }
             .background(Color.black.opacity(0.06))
             .cornerRadius(6)
+
+            if model.succeeded == false && model.isLocalNetworkError {
+                HStack(spacing: 8) {
+                    Image(systemName: "network.slash")
+                        .foregroundColor(.orange)
+                    Text(L(
+                        "If connecting to a LAN server, allow RepoShell in System Settings → Privacy & Security → Local Network.",
+                        "如果目标为局域网服务器，请在「系统设置 → 隐私与安全性 → 本地网络」中允许 RepoShell 访问。"
+                    ))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    Spacer()
+                    Button(L("Local Network Settings", "打开本地网络设置")) {
+                        LocalNetworkAuthorizationHelper.requestPermissionIfNeeded()
+                        LocalNetworkAuthorizationHelper.openSettings()
+                    }
+                    .font(.caption)
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(6)
+            }
 
             HStack {
                 Toggle(L("Close automatically when done", "自动关闭此窗口"), isOn: $model.autoClose)

@@ -64,8 +64,10 @@ public final class AuthManager: @unchecked Sendable {
             env["DISPLAY"] = ":0"
         }
 
+        var repoAuthMode: AuthMode = .none
         if let norm = normRepo,
            let repo = cfg.matchingRepository(for: norm) {
+            repoAuthMode = repo.authConfig.mode
             if repo.authConfig.mode == .sshKey && !repo.authConfig.sshKeyPath.isEmpty {
                 let key = repo.authConfig.sshKeyPath.replacingOccurrences(of: "'", with: "'\\''")
                 let port = repo.authConfig.sshPort > 0 ? repo.authConfig.sshPort : 22
@@ -74,10 +76,14 @@ public final class AuthManager: @unchecked Sendable {
         }
 
         if let credURL = helperURL(named: AppConstants.credentialHelperName) {
-            // Configure git credential helper cleanly via GIT_CONFIG_* env vars (Git 2.31+)
-            env["GIT_CONFIG_COUNT"] = "1"
+            // Configure git credential helper chain via GIT_CONFIG_* env vars (Git 2.31+):
+            // - For `.none` (system default), try macOS `osxkeychain` first, then fall back to RepoShell Askpass helper.
+            // - For `.userPassword`, clear inherited helpers first so per-repo Keychain credentials take precedence.
+            env["GIT_CONFIG_COUNT"] = "2"
             env["GIT_CONFIG_KEY_0"] = "credential.helper"
-            env["GIT_CONFIG_VALUE_0"] = credURL.path
+            env["GIT_CONFIG_VALUE_0"] = (repoAuthMode == .userPassword) ? "" : "osxkeychain"
+            env["GIT_CONFIG_KEY_1"] = "credential.helper"
+            env["GIT_CONFIG_VALUE_1"] = credURL.path
         }
 
         return env

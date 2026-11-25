@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         setupMainMenuBar()
+        LocalNetworkAuthorizationHelper.requestPermissionIfNeeded()
 
         actionObserver = DistributedNotificationCenter.default().addObserver(
             forName: AppConstants.DistributedNotification.actionTriggered.cfName,

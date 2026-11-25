@@ -1,5 +1,6 @@
 import Cocoa
 import FinderSync
+import Network
 import RepoShellShared
 import RepoShellVcs
 import RepoShellServices
@@ -119,6 +120,40 @@ enum FinderExtensionHelper {
             arguments: ["-e", "use", "-i", AppConstants.finderSyncBundleID]
         )
         return await isEnabled()
+    }
+}
+
+@MainActor
+enum LocalNetworkAuthorizationHelper {
+    private static var activeBrowser: NWBrowser?
+
+    static func requestPermissionIfNeeded() {
+        guard activeBrowser == nil else { return }
+        let params = NWParameters()
+        params.includePeerToPeer = true
+        let browser = NWBrowser(for: .bonjour(type: "_http._tcp", domain: "local."), using: params)
+        activeBrowser = browser
+        browser.stateUpdateHandler = { state in
+            switch state {
+            case .failed, .cancelled:
+                Task { @MainActor in
+                    activeBrowser = nil
+                }
+            default:
+                break
+            }
+        }
+        browser.start(queue: .main)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            activeBrowser?.cancel()
+            activeBrowser = nil
+        }
+    }
+
+    static func openSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 
