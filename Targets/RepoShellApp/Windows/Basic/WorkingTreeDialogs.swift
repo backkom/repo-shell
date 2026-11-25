@@ -824,8 +824,8 @@ struct TaskProgressWindowView: View {
                     Image(systemName: "network.slash")
                         .foregroundColor(.orange)
                     Text(L(
-                        "If connecting to a LAN server, allow RepoShell in System Settings → Privacy & Security → Local Network.",
-                        "如果目标为局域网服务器，请在「系统设置 → 隐私与安全性 → 本地网络」中允许 RepoShell 访问。"
+                        "If connecting to a LAN server, allow RepoShell in System Settings → Privacy & Security → Local Network. If already enabled after an update, toggle it off/on or click Retry.",
+                        "如果目标为局域网服务器，请在「系统设置 → 隐私与安全性 → 本地网络」中允许 RepoShell 访问；若更新后已开启仍提示失败，请先关闭再重新开启或点击重试。"
                     ))
                     .font(.caption)
                     .foregroundColor(.secondary)

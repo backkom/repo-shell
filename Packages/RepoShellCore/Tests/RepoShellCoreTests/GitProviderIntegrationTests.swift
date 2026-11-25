@@ -159,4 +159,14 @@ final class GitProviderIntegrationTests: XCTestCase {
         let contentInB = try String(contentsOf: repoB.appendingPathComponent("hello.txt"), encoding: .utf8)
         XCTAssertTrue(contentInB.contains("main content"))
     }
+
+    func testTransientLocalNetworkErrorDetection() {
+        let necpErr = """
+        fatal: unable to access 'https://leafserver.work:10000/leaf/repo-shell.git/': Failed to connect to leafserver.work port 10000 after 1 ms: Couldn't connect to server
+        """
+        XCTAssertTrue(GitProvider.isLikelyTransientLocalNetworkError(stderr: necpErr))
+        XCTAssertTrue(GitProvider.isLikelyTransientLocalNetworkError(stderr: "No route to host"))
+        XCTAssertFalse(GitProvider.isLikelyTransientLocalNetworkError(stderr: "remote: Invalid username or password.\nfatal: Authentication failed"))
+        XCTAssertFalse(GitProvider.isLikelyTransientLocalNetworkError(stderr: "! [rejected] master -> master (non-fast-forward)"))
+    }
 }

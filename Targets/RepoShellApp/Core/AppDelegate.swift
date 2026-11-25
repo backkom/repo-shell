@@ -115,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let showItem = NSMenuItem(title: L("Show RepoShell", "显示 RepoShell"), action: #selector(openMainAction), keyEquivalent: "")
         showItem.target = self
+        showItem.image = MenuActionIconRenderer.appBrandMenuIcon()
         menu.addItem(showItem)
         menu.addItem(.separator())
 
@@ -141,9 +142,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let mi = NSMenuItem(title: title, action: #selector(runRepoStatusAction(_:)), keyEquivalent: "")
                     mi.target = self
                     mi.representedObject = (act, repo.path)
+                    mi.image = MenuActionIconRenderer.menuIcon(for: act)
                     sub.addItem(mi)
                 }
                 let parent = NSMenuItem(title: repo.name, action: nil, keyEquivalent: "")
+                parent.image = MenuActionIconRenderer.submenuIcon(symbolName: "folder.fill", color: RGBColor(r: 29, g: 124, b: 242))
                 parent.submenu = sub
                 menu.addItem(parent)
             }

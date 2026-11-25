@@ -117,8 +117,16 @@ final class FinderSync: FIFinderSync {
         let selectedPaths = selectedURLs.map { PathUtils.normalize($0.path) }
         let lookupPath = selectedPaths.first ?? targetDirPath
 
-        let (cfg, snapshot, diffLater) = snapshotBundle(forPath: lookupPath)
-        let matchedRepo = cfg.matchingRepository(for: lookupPath) ?? cfg.matchingRepository(for: targetDirPath)
+        let latestCfg = storage.loadConfig()
+        let (cfg, matchedRepo, snapshot, diffLater) = stateLock.withLock {
+            self.config = latestCfg
+            let repo = latestCfg.matchingRepository(for: lookupPath) ?? latestCfg.matchingRepository(for: targetDirPath)
+            let snap = repo.flatMap { snapshotsByRepo[$0.path] ?? storage.loadStatusSnapshot(for: $0.path) }
+            if let repo = repo, let snap = snap, snapshotsByRepo[repo.path] == nil {
+                snapshotsByRepo[repo.path] = snap
+            }
+            return (latestCfg, repo, snap, diffLaterState)
+        }
 
         var containsGit = false
         if matchedRepo == nil {
@@ -150,6 +158,7 @@ final class FinderSync: FIFinderSync {
         let built = MenuBuilder.buildMenu(
             resolvedItems: resolved,
             cascade: shouldCascade,
+            topLevelActions: isToolbar ? [] : cfg.preferences.topLevelMenuActions,
             showIcons: cfg.preferences.showMenuIcons,
             targetDirectoryPath: targetDirPath,
             selectedPaths: selectedPaths,

@@ -120,4 +120,92 @@ final class ServicesTests: XCTestCase {
         XCTAssertTrue(FinderTagService.isCloudDrivePath("/Users/test/Dropbox/work/repo", indicators: indicators))
         XCTAssertFalse(FinderTagService.isCloudDrivePath("/Users/test/Documents/code/repo", indicators: indicators))
     }
+
+    func testAuthManagerCredentialHelperChain() throws {
+        XCTAssertEqual(
+            AuthManager.shellQuotedCredentialHelper(path: "/Applications/Repo Shell/bin/it's helper"),
+            "!'/Applications/Repo Shell/bin/it'\\''s helper'"
+        )
+
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let bundleURL = dir.appendingPathComponent("TestApp.bundle", isDirectory: true)
+        let contentsDir = bundleURL.appendingPathComponent("Contents", isDirectory: true)
+        let helpersDir = contentsDir.appendingPathComponent("Helpers", isDirectory: true)
+        try FileManager.default.createDirectory(at: helpersDir, withIntermediateDirectories: true)
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.leaf.reposhell.test</string></dict></plist>
+        """
+        try plist.write(to: contentsDir.appendingPathComponent("Info.plist"), atomically: true, encoding: .utf8)
+
+        let fakeCredURL = helpersDir.appendingPathComponent(AppConstants.credentialHelperName)
+        try "#!/bin/sh\nexit 0\n".write(to: fakeCredURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeCredURL.path)
+
+        let testBundle = try XCTUnwrap(Bundle(url: bundleURL))
+        let storageDir = dir.appendingPathComponent("storage", isDirectory: true)
+        let storage = SharedStorage(baseDirectoryURL: storageDir)
+
+        var cfg = SharedConfig()
+        let repoDefault = RepositoryEntry(path: "/tmp/repo-default", vcsType: .git, authConfig: RepoAuthConfig(mode: .none))
+        let repoPass = RepositoryEntry(path: "/tmp/repo-pass", vcsType: .git, authConfig: RepoAuthConfig(mode: .userPassword, username: "alice"))
+        cfg.repositories = [repoDefault, repoPass]
+        try storage.saveConfig(cfg)
+
+        let auth = AuthManager(storage: storage, bundle: testBundle)
+
+        let envDefault = auth.environment(for: repoDefault.path)
+        XCTAssertEqual(envDefault["GIT_CONFIG_COUNT"], "3")
+        XCTAssertEqual(envDefault["GIT_CONFIG_KEY_0"], "credential.helper")
+        XCTAssertEqual(envDefault["GIT_CONFIG_VALUE_0"], "")
+        XCTAssertEqual(envDefault["GIT_CONFIG_KEY_1"], "credential.helper")
+        if let appleHelper = AuthManager.systemAppleOsxKeychainHelperPath() {
+            XCTAssertEqual(envDefault["GIT_CONFIG_VALUE_1"], AuthManager.shellQuotedCredentialHelper(path: appleHelper))
+        } else {
+            XCTAssertEqual(envDefault["GIT_CONFIG_VALUE_1"], "osxkeychain")
+        }
+        XCTAssertEqual(envDefault["GIT_CONFIG_KEY_2"], "credential.helper")
+        XCTAssertEqual(envDefault["GIT_CONFIG_VALUE_2"], AuthManager.shellQuotedCredentialHelper(path: fakeCredURL.path))
+
+        let envPass = auth.environment(for: repoPass.path)
+        XCTAssertEqual(envPass["GIT_CONFIG_COUNT"], "2")
+        XCTAssertEqual(envPass["GIT_CONFIG_VALUE_0"], "")
+        XCTAssertEqual(envPass["GIT_CONFIG_VALUE_1"], AuthManager.shellQuotedCredentialHelper(path: fakeCredURL.path))
+    }
+
+    func testLegacyConfigDecodingPreservesDataAndDefaultsTopLevelActions() throws {
+        let legacyJSON = """
+        {
+          "schemaVersion": 1,
+          "excludedPaths": [],
+          "workspaceRoots": [],
+          "repositories": [
+            {
+              "id": "2CD7AABB-9828-4370-BBF3-E5D029F8D91A",
+              "path": "/tmp/legacy-repo",
+              "name": "legacy-repo",
+              "vcsType": "git",
+              "isAutoDiscovered": false,
+              "authConfig": { "mode": "none", "username": "", "sshKeyPath": "", "sshPort": 22 }
+            }
+          ],
+          "preferences": {
+            "cascadeMenu": true,
+            "diffToolId": "bcomp",
+            "hasCompletedSetupWizard": true,
+            "useBundledGit": true
+          }
+        }
+        """
+        let data = try XCTUnwrap(legacyJSON.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(SharedConfig.self, from: data)
+        XCTAssertEqual(decoded.repositories.count, 1)
+        XCTAssertEqual(decoded.repositories[0].path, "/tmp/legacy-repo")
+        XCTAssertEqual(decoded.preferences.diffToolId, "bcomp")
+        XCTAssertTrue(decoded.preferences.hasCompletedSetupWizard)
+        XCTAssertEqual(decoded.preferences.topLevelMenuActions, AppPreferences.defaultTopLevelMenuActions)
+    }
 }

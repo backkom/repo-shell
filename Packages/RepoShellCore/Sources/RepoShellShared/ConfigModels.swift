@@ -153,6 +153,57 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var darkColors: StatusTextColors
     public var hasCompletedSetupWizard: Bool
     public var cloudDriveIndicators: [String]
+    public var topLevelMenuActions: [MenuAction]
+
+    public static let defaultTopLevelMenuActions: [MenuAction] = [
+        .gitCommit,
+        .gitPull,
+        .gitFetch,
+        .gitPush,
+        .showLog
+    ]
+
+    public static let promotableMenuActions: [MenuAction] = [
+        .gitCommit,
+        .gitPull,
+        .gitFetch,
+        .gitPush,
+        .showLog,
+        .checkForModifications,
+        .diff,
+        .revert,
+        .stashPush,
+        .checkout,
+        .repoBrowser,
+        .blame
+    ]
+
+    enum CodingKeys: String, CodingKey {
+        case cascadeMenu
+        case showMenuIcons
+        case showInMenuBar
+        case showPreferencesOnLaunch
+        case showSecurityWarning
+        case useBundledGit
+        case externalGitPath
+        case diffToolId
+        case customDiffCommand
+        case mergeToolId
+        case customMergeCommand
+        case useFinderTagsForCloudDrives
+        case useFinderTagsForLocalRepos
+        case checkEmptyCommitMessage
+        case commitAutoPush
+        case commitShowUntracked
+        case enableTrashOnDelete
+        case showHiddenFilesInRepoBrowser
+        case language
+        case lightColors
+        case darkColors
+        case hasCompletedSetupWizard
+        case cloudDriveIndicators
+        case topLevelMenuActions
+    }
 
     public init(
         cascadeMenu: Bool = true,
@@ -185,7 +236,8 @@ public struct AppPreferences: Codable, Equatable, Sendable {
             "Google Drive",
             "SynologyDrive",
             "Box"
-        ]
+        ],
+        topLevelMenuActions: [MenuAction] = AppPreferences.defaultTopLevelMenuActions
     ) {
         self.cascadeMenu = cascadeMenu
         self.showMenuIcons = showMenuIcons
@@ -210,6 +262,36 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         self.darkColors = darkColors
         self.hasCompletedSetupWizard = hasCompletedSetupWizard
         self.cloudDriveIndicators = cloudDriveIndicators
+        self.topLevelMenuActions = topLevelMenuActions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppPreferences()
+        self.cascadeMenu = try c.decodeIfPresent(Bool.self, forKey: .cascadeMenu) ?? defaults.cascadeMenu
+        self.showMenuIcons = try c.decodeIfPresent(Bool.self, forKey: .showMenuIcons) ?? defaults.showMenuIcons
+        self.showInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .showInMenuBar) ?? defaults.showInMenuBar
+        self.showPreferencesOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .showPreferencesOnLaunch) ?? defaults.showPreferencesOnLaunch
+        self.showSecurityWarning = try c.decodeIfPresent(Bool.self, forKey: .showSecurityWarning) ?? defaults.showSecurityWarning
+        self.useBundledGit = try c.decodeIfPresent(Bool.self, forKey: .useBundledGit) ?? defaults.useBundledGit
+        self.externalGitPath = try c.decodeIfPresent(String.self, forKey: .externalGitPath) ?? defaults.externalGitPath
+        self.diffToolId = try c.decodeIfPresent(String.self, forKey: .diffToolId) ?? defaults.diffToolId
+        self.customDiffCommand = try c.decodeIfPresent(String.self, forKey: .customDiffCommand) ?? defaults.customDiffCommand
+        self.mergeToolId = try c.decodeIfPresent(String.self, forKey: .mergeToolId) ?? defaults.mergeToolId
+        self.customMergeCommand = try c.decodeIfPresent(String.self, forKey: .customMergeCommand) ?? defaults.customMergeCommand
+        self.useFinderTagsForCloudDrives = try c.decodeIfPresent(Bool.self, forKey: .useFinderTagsForCloudDrives) ?? defaults.useFinderTagsForCloudDrives
+        self.useFinderTagsForLocalRepos = try c.decodeIfPresent(Bool.self, forKey: .useFinderTagsForLocalRepos) ?? defaults.useFinderTagsForLocalRepos
+        self.checkEmptyCommitMessage = try c.decodeIfPresent(Bool.self, forKey: .checkEmptyCommitMessage) ?? defaults.checkEmptyCommitMessage
+        self.commitAutoPush = try c.decodeIfPresent(Bool.self, forKey: .commitAutoPush) ?? defaults.commitAutoPush
+        self.commitShowUntracked = try c.decodeIfPresent(Bool.self, forKey: .commitShowUntracked) ?? defaults.commitShowUntracked
+        self.enableTrashOnDelete = try c.decodeIfPresent(Bool.self, forKey: .enableTrashOnDelete) ?? defaults.enableTrashOnDelete
+        self.showHiddenFilesInRepoBrowser = try c.decodeIfPresent(Bool.self, forKey: .showHiddenFilesInRepoBrowser) ?? defaults.showHiddenFilesInRepoBrowser
+        self.language = try c.decodeIfPresent(AppLanguage.self, forKey: .language) ?? defaults.language
+        self.lightColors = try c.decodeIfPresent(StatusTextColors.self, forKey: .lightColors) ?? defaults.lightColors
+        self.darkColors = try c.decodeIfPresent(StatusTextColors.self, forKey: .darkColors) ?? defaults.darkColors
+        self.hasCompletedSetupWizard = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedSetupWizard) ?? defaults.hasCompletedSetupWizard
+        self.cloudDriveIndicators = try c.decodeIfPresent([String].self, forKey: .cloudDriveIndicators) ?? defaults.cloudDriveIndicators
+        self.topLevelMenuActions = try c.decodeIfPresent([MenuAction].self, forKey: .topLevelMenuActions) ?? Self.defaultTopLevelMenuActions
     }
 }
 

@@ -57,6 +57,87 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
         return output
     }
 
+    public static func isLikelyTransientLocalNetworkError(stderr: String) -> Bool {
+        stderr.contains("Failed to connect to")
+            || stderr.contains("Couldn't connect to server")
+            || stderr.contains("No route to host")
+    }
+
+    /// Retries short-lived local-network drops caused by macOS 15 NECP UUID cache refresh after rebuilds.
+    private func runNetworkGit(
+        repoPath: String?,
+        arguments: [String],
+        extraEnv: [String: String] = [:],
+        standardInput: Data? = nil,
+        checkExitCode: Bool = true,
+        onOutputLine: (@Sendable (String, Bool) -> Void)? = nil
+    ) async throws -> ProcessOutput {
+        let retryDelays: [UInt64] = [600_000_000, 1_000_000_000]
+        let fullCommand = "git -c core.quotepath=false " + arguments.joined(separator: " ")
+
+        for attempt in 0...retryDelays.count {
+            let hasRetriesRemaining = attempt < retryDelays.count
+            let lineBuffer = TransientNetworkLineBuffer()
+            let callback: (@Sendable (String, Bool) -> Void)?
+            if let userCallback = onOutputLine {
+                callback = { line, isStderr in
+                    if hasRetriesRemaining && TransientNetworkLineBuffer.isTransientLine(line, isStderr: isStderr) {
+                        lineBuffer.append(line: line, isStderr: isStderr)
+                    } else {
+                        userCallback(line, isStderr)
+                    }
+                }
+            } else {
+                callback = nil
+            }
+
+            let startedAt = Date()
+            let output = try await runGit(
+                repoPath: repoPath,
+                arguments: arguments,
+                extraEnv: extraEnv,
+                standardInput: standardInput,
+                checkExitCode: false,
+                onOutputLine: callback
+            )
+            let elapsed = Date().timeIntervalSince(startedAt)
+
+            if output.exitCode == 0 {
+                if let onOutputLine = onOutputLine {
+                    for entry in lineBuffer.takeAll() {
+                        onOutputLine(entry.line, entry.isStderr)
+                    }
+                }
+                return output
+            }
+
+            if hasRetriesRemaining,
+               elapsed < 3.0,
+               Self.isLikelyTransientLocalNetworkError(stderr: output.stderrString) {
+                lineBuffer.clear()
+                try await Task.sleep(nanoseconds: retryDelays[attempt])
+                continue
+            }
+
+            if let onOutputLine = onOutputLine {
+                for entry in lineBuffer.takeAll() {
+                    onOutputLine(entry.line, entry.isStderr)
+                }
+            }
+            if checkExitCode {
+                throw VcsError.commandFailed(
+                    command: fullCommand,
+                    exitCode: output.exitCode,
+                    stderr: output.stderrString,
+                    stdout: output.stdoutString
+                )
+            }
+            return output
+        }
+
+        fatalError("Unreachable")
+    }
+
     // MARK: - Detection & State
 
     public func detectRepositoryRoot(for path: String) async -> String? {
@@ -206,7 +287,7 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
 
         let parentDir = URL(fileURLWithPath: options.destinationPath).deletingLastPathComponent().path
         try? FileManager.default.createDirectory(atPath: parentDir, withIntermediateDirectories: true)
-        let out = try await runGit(
+        let out = try await runNetworkGit(
             repoPath: parentDir,
             arguments: args,
             extraEnv: extraEnv,
@@ -349,7 +430,7 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
         if options.prune { args.append("--prune") }
         if options.fetchTags { args.append("--tags") }
 
-        let out = try await runGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv, onOutputLine: onOutputLine)
+        let out = try await runNetworkGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv, onOutputLine: onOutputLine)
         return VcsCommandResult(command: "git fetch", exitCode: out.exitCode, stdout: out.stdoutString, stderr: out.stderrString)
     }
 
@@ -381,7 +462,7 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
                 args.append(branch)
             }
         }
-        let out = try await runGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv, onOutputLine: onOutputLine)
+        let out = try await runNetworkGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv, onOutputLine: onOutputLine)
         return VcsCommandResult(command: "git pull", exitCode: out.exitCode, stdout: out.stdoutString, stderr: out.stderrString)
     }
 
@@ -414,7 +495,7 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
                 args.append("refs/tags/\(tag)")
             }
         }
-        let out = try await runGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv, onOutputLine: onOutputLine)
+        let out = try await runNetworkGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv, onOutputLine: onOutputLine)
         return VcsCommandResult(command: "git push", exitCode: out.exitCode, stdout: out.stdoutString, stderr: out.stderrString)
     }
 
@@ -553,7 +634,7 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
         branchName: String,
         extraEnv: [String: String] = [:]
     ) async throws -> VcsCommandResult {
-        let out = try await runGit(repoPath: repoPath, arguments: ["push", remote, "--delete", branchName], extraEnv: extraEnv)
+        let out = try await runNetworkGit(repoPath: repoPath, arguments: ["push", remote, "--delete", branchName], extraEnv: extraEnv)
         return VcsCommandResult(command: "git push --delete", exitCode: out.exitCode, stdout: out.stdoutString, stderr: out.stderrString)
     }
 
@@ -937,7 +1018,7 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
             args.append(contentsOf: ["-b", br])
         }
         args.append(contentsOf: [url, path])
-        let out = try await runGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv)
+        let out = try await runNetworkGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv)
         return VcsCommandResult(command: "git submodule add", exitCode: out.exitCode, stdout: out.stdoutString, stderr: out.stderrString)
     }
 
@@ -958,7 +1039,7 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
             args.append("--")
             args.append(contentsOf: options.paths)
         }
-        let out = try await runGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv)
+        let out = try await runNetworkGit(repoPath: repoPath, arguments: args, extraEnv: extraEnv)
         return VcsCommandResult(command: "git submodule update", exitCode: out.exitCode, stdout: out.stdoutString, stderr: out.stderrString)
     }
 
@@ -1062,6 +1143,39 @@ public enum CherryPickControlAction: Sendable {
         case .continue: return "--continue"
         case .skip: return "--skip"
         case .abort: return "--abort"
+        }
+    }
+}
+
+private final class TransientNetworkLineBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [(line: String, isStderr: Bool)] = []
+
+    static func isTransientLine(_ line: String, isStderr: Bool) -> Bool {
+        guard isStderr else { return false }
+        return line.contains("fatal: unable to access")
+            || line.contains("Failed to connect to")
+            || line.contains("Couldn't connect to server")
+            || line.contains("No route to host")
+    }
+
+    func append(line: String, isStderr: Bool) {
+        lock.withLock {
+            entries.append((line: line, isStderr: isStderr))
+        }
+    }
+
+    func takeAll() -> [(line: String, isStderr: Bool)] {
+        lock.withLock {
+            let copy = entries
+            entries.removeAll()
+            return copy
+        }
+    }
+
+    func clear() {
+        lock.withLock {
+            entries.removeAll()
         }
     }
 }

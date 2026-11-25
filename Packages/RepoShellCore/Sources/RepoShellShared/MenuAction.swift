@@ -1,5 +1,22 @@
 import Foundation
 
+public enum MenuActionIconStyle: Equatable, Sendable {
+    case badge(fill: RGBColor)
+    case twoTone(primary: RGBColor, secondary: RGBColor)
+    case solid(color: RGBColor)
+
+    public var accentColor: RGBColor {
+        switch self {
+        case .badge(let fill):
+            return fill
+        case .twoTone(let primary, _):
+            return primary
+        case .solid(let color):
+            return color
+        }
+    }
+}
+
 public enum MenuAction: String, Codable, CaseIterable, Sendable {
     // General & Repository Registration
     case showApp = "show-app"
@@ -88,46 +105,104 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
 
     public var systemSymbolName: String {
         switch self {
-        case .showApp: return "app.badge"
-        case .addRepository: return "plus.rectangle.on.folder"
-        case .excludeRepository: return "folder.badge.minus"
-        case .refresh: return "arrow.clockwise"
-        case .gitClone, .svnCheckout: return "arrow.down.doc"
-        case .gitInit: return "folder.badge.plus"
-        case .gitCommit: return "checkmark.circle"
-        case .gitPull, .svnUpdate: return "arrow.down.circle"
-        case .gitFetch: return "arrow.down.to.line"
-        case .gitPush: return "arrow.up.circle"
+        case .showApp: return "app.badge.fill"
+        case .addRepository: return "plus.rectangle.on.folder.fill"
+        case .excludeRepository: return "folder.fill.badge.minus"
+        case .refresh: return "arrow.clockwise.circle.fill"
+        case .gitClone, .svnCheckout: return "arrow.down.doc.fill"
+        case .gitInit: return "folder.fill.badge.plus"
+        case .gitCommit: return "checkmark.circle.fill"
+        case .gitPull, .svnUpdate: return "arrow.down.circle.fill"
+        case .gitFetch: return "arrow.down.to.line.circle.fill"
+        case .gitPush: return "arrow.up.circle.fill"
         case .showLog: return "clock.arrow.circlepath"
         case .checkForModifications: return "doc.text.magnifyingglass"
         case .browseReferences: return "point.3.connected.trianglepath.dotted"
-        case .stashPush: return "tray.and.arrow.down"
-        case .stashList: return "tray.full"
+        case .stashPush: return "tray.and.arrow.down.fill"
+        case .stashList: return "tray.full.fill"
         case .repoBrowser: return "sidebar.squares.left"
-        case .resolveConflicts: return "exclamationmark.triangle"
-        case .revert: return "arrow.uturn.backward"
+        case .resolveConflicts: return "exclamationmark.triangle.fill"
+        case .revert: return "arrow.uturn.backward.circle.fill"
         case .checkout: return "arrow.triangle.swap"
         case .createBranch: return "arrow.triangle.branch"
-        case .createTag: return "tag"
+        case .createTag: return "tag.fill"
         case .merge: return "arrow.triangle.merge"
-        case .abortMerge: return "xmark.octagon"
-        case .reset: return "backward.end"
-        case .export: return "square.and.arrow.up"
+        case .abortMerge: return "xmark.octagon.fill"
+        case .reset: return "backward.end.circle.fill"
+        case .export: return "square.and.arrow.up.fill"
         case .diff, .diffPrevious, .diffLater, .diffWithLater, .compareRevisions:
-            return "arrow.left.arrow.right.square"
-        case .add: return "plus.circle"
-        case .delete, .deleteKeepLocal: return "trash"
-        case .rename: return "pencil"
-        case .addToIgnore: return "eye.slash"
-        case .repoInfo: return "info.circle"
+            return "arrow.left.arrow.right.square.fill"
+        case .add: return "plus.circle.fill"
+        case .delete: return "trash.fill"
+        case .deleteKeepLocal: return "trash.slash.fill"
+        case .rename: return "pencil.circle.fill"
+        case .addToIgnore: return "eye.slash.fill"
+        case .repoInfo: return "info.circle.fill"
         case .cleanup: return "sparkles"
         case .rebase: return "arrow.up.and.down.text.horizontal"
         case .cherryPick: return "wand.and.stars"
-        case .showRefLog: return "list.bullet.rectangle"
-        case .blame: return "person.text.rectangle"
+        case .showRefLog: return "list.bullet.rectangle.fill"
+        case .blame: return "person.text.rectangle.fill"
         case .submoduleAdd, .submoduleUpdate, .submoduleManage:
-            return "shippingbox"
-        default: return "gear"
+            return "shippingbox.fill"
+        default: return "gearshape.fill"
+        }
+    }
+
+    public var iconStyle: MenuActionIconStyle {
+        switch self {
+        case .gitCommit, .add:
+            return .badge(fill: RGBColor(r: 34, g: 168, b: 83))
+        case .gitPull, .svnUpdate, .repoInfo, .refresh, .rename:
+            return .badge(fill: RGBColor(r: 29, g: 124, b: 242))
+        case .gitFetch, .diff, .diffPrevious, .diffLater, .diffWithLater, .compareRevisions:
+            return .badge(fill: RGBColor(r: 14, g: 154, b: 180))
+        case .gitPush:
+            return .badge(fill: RGBColor(r: 238, g: 122, b: 24))
+        case .resolveConflicts:
+            return .badge(fill: RGBColor(r: 234, g: 148, b: 0))
+        case .revert:
+            return .badge(fill: RGBColor(r: 234, g: 134, b: 0))
+        case .reset, .abortMerge:
+            return .badge(fill: RGBColor(r: 224, g: 62, b: 62))
+        case .showApp:
+            return .twoTone(primary: RGBColor(r: 224, g: 62, b: 62), secondary: RGBColor(r: 29, g: 124, b: 242))
+        case .addRepository, .gitInit:
+            return .twoTone(primary: RGBColor(r: 34, g: 168, b: 83), secondary: RGBColor(r: 29, g: 124, b: 242))
+        case .excludeRepository:
+            return .twoTone(primary: RGBColor(r: 224, g: 62, b: 62), secondary: RGBColor(r: 100, g: 116, b: 139))
+        case .checkForModifications:
+            return .twoTone(primary: RGBColor(r: 29, g: 124, b: 242), secondary: RGBColor(r: 14, g: 154, b: 180))
+        case .stashPush:
+            return .twoTone(primary: RGBColor(r: 230, g: 134, b: 0), secondary: RGBColor(r: 204, g: 106, b: 0))
+        case .gitClone, .svnCheckout, .checkout:
+            return .solid(color: RGBColor(r: 29, g: 124, b: 242))
+        case .showLog, .browseReferences, .merge:
+            return .solid(color: RGBColor(r: 126, g: 87, b: 224))
+        case .showRefLog, .rebase:
+            return .solid(color: RGBColor(r: 99, g: 102, b: 241))
+        case .repoBrowser, .export:
+            return .solid(color: RGBColor(r: 14, g: 154, b: 180))
+        case .blame:
+            return .solid(color: RGBColor(r: 168, g: 85, b: 247))
+        case .createBranch:
+            return .solid(color: RGBColor(r: 34, g: 168, b: 83))
+        case .createTag, .cherryPick:
+            return .solid(color: RGBColor(r: 219, g: 68, b: 143))
+        case .stashList:
+            return .solid(color: RGBColor(r: 230, g: 134, b: 0))
+        case .submoduleAdd, .submoduleUpdate, .submoduleManage:
+            return .solid(color: RGBColor(r: 186, g: 118, b: 42))
+        case .delete:
+            return .solid(color: RGBColor(r: 224, g: 62, b: 62))
+        case .deleteKeepLocal:
+            return .solid(color: RGBColor(r: 230, g: 110, b: 40))
+        case .addToIgnore:
+            return .solid(color: RGBColor(r: 100, g: 116, b: 139))
+        case .cleanup:
+            return .solid(color: RGBColor(r: 234, g: 160, b: 0))
+        default:
+            return .solid(color: RGBColor(r: 100, g: 116, b: 139))
         }
     }
 
@@ -140,6 +215,58 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
             return true
         default:
             return false
+        }
+    }
+
+    public var localizationKey: String {
+        switch self {
+        case .showApp: return "menu.showApp"
+        case .addRepository: return "menu.addRepository"
+        case .excludeRepository: return "menu.excludeRepository"
+        case .refresh: return "menu.refresh"
+        case .gitClone: return "menu.gitClone"
+        case .gitInit: return "menu.gitInit"
+        case .gitCommit: return "menu.gitCommit"
+        case .gitPull: return "menu.gitPull"
+        case .gitFetch: return "menu.gitFetch"
+        case .gitPush: return "menu.gitPush"
+        case .showLog: return "menu.showLog"
+        case .checkForModifications: return "menu.checkModifications"
+        case .browseReferences: return "menu.browseReferences"
+        case .stashPush: return "menu.stashPush"
+        case .stashList: return "menu.stashList"
+        case .repoBrowser: return "menu.repoBrowser"
+        case .resolveConflicts: return "menu.resolve"
+        case .revert: return "menu.revert"
+        case .checkout: return "menu.checkout"
+        case .createBranch: return "menu.createBranch"
+        case .createTag: return "menu.createTag"
+        case .merge: return "menu.merge"
+        case .abortMerge: return "menu.abortMerge"
+        case .reset: return "menu.reset"
+        case .export: return "menu.export"
+        case .diff: return "menu.diff"
+        case .diffPrevious: return "menu.diffPrev"
+        case .diffLater: return "menu.diffLater"
+        case .diffWithLater: return "menu.diffWithLater"
+        case .add: return "menu.add"
+        case .delete: return "menu.delete"
+        case .deleteKeepLocal: return "menu.deleteKeepLocal"
+        case .rename: return "menu.rename"
+        case .addToIgnore: return "menu.addToIgnore"
+        case .repoInfo: return "menu.repoInfo"
+        case .cleanup: return "menu.cleanup"
+        case .rebase: return "menu.rebase"
+        case .cherryPick: return "menu.cherryPick"
+        case .showRefLog: return "menu.showRefLog"
+        case .compareRevisions: return "menu.compareRevisions"
+        case .blame: return "menu.blame"
+        case .submoduleAdd: return "menu.submoduleAdd"
+        case .submoduleUpdate: return "menu.submoduleUpdate"
+        case .submoduleManage: return "menu.submoduleManage"
+        case .svnCheckout, .svnUpdate, .svnLock, .svnUnlock,
+             .svnProperties, .svnRelocate, .svnCreatePatch, .svnApplyPatch:
+            return rawValue
         }
     }
 }
@@ -315,7 +442,7 @@ public enum MenuVisibilityResolver {
             .item(action: .submoduleUpdate, title: loc.string("menu.submoduleUpdate")),
             .item(action: .submoduleManage, title: loc.string("menu.submoduleManage"))
         ]
-        items.append(.submenu(title: loc.string("menu.submodules"), symbolName: "shippingbox", items: submoduleItems))
+        items.append(.submenu(title: loc.string("menu.submodules"), symbolName: "shippingbox.fill", items: submoduleItems))
 
         items.append(.separator)
         items.append(.item(action: .repoInfo, title: loc.string("menu.repoInfo")))
@@ -327,5 +454,41 @@ public enum MenuVisibilityResolver {
         items.append(.item(action: .showApp, title: loc.string("menu.showApp")))
 
         return items
+    }
+
+    public static func partitionForCascade(
+        items: [ResolvedMenuItem],
+        topLevelActions: [MenuAction]
+    ) -> (topLevel: [ResolvedMenuItem], submenu: [ResolvedMenuItem]) {
+        guard !topLevelActions.isEmpty else {
+            return ([], sanitizeSeparators(items))
+        }
+        let topSet = Set(topLevelActions)
+        var topLevel: [ResolvedMenuItem] = []
+        var rawSubmenu: [ResolvedMenuItem] = []
+
+        for item in items {
+            if case .item(let action, _) = item, topSet.contains(action) {
+                topLevel.append(item)
+            } else {
+                rawSubmenu.append(item)
+            }
+        }
+        return (topLevel, sanitizeSeparators(rawSubmenu))
+    }
+
+    private static func sanitizeSeparators(_ items: [ResolvedMenuItem]) -> [ResolvedMenuItem] {
+        var result: [ResolvedMenuItem] = []
+        for item in items {
+            if case .separator = item {
+                if result.isEmpty { continue }
+                if case .separator = result.last { continue }
+            }
+            result.append(item)
+        }
+        while case .separator = result.last {
+            result.removeLast()
+        }
+        return result
     }
 }

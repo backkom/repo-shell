@@ -23,9 +23,8 @@ struct QuickActionsTabView: View {
                         }
                     )) {
                         HStack(spacing: 8) {
-                            Image(systemName: item.action.systemSymbolName)
-                                .frame(width: 18)
-                                .foregroundColor(.accentColor)
+                            Image(nsImage: MenuActionIconRenderer.menuIcon(for: item.action, size: 16))
+                                .frame(width: 18, height: 18)
                             Text(item.title)
                         }
                     }

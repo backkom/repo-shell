@@ -12,6 +12,7 @@ enum MenuBuilder {
     static func buildMenu(
         resolvedItems: [ResolvedMenuItem],
         cascade: Bool,
+        topLevelActions: [MenuAction] = [],
         showIcons: Bool,
         targetDirectoryPath: String,
         selectedPaths: [String],
@@ -20,37 +21,63 @@ enum MenuBuilder {
         selector: Selector
     ) -> (menu: NSMenu, actionsByTag: [Int: MenuActionBox]) {
         let rootMenu = NSMenu(title: AppConstants.appName)
-        let containerMenu: NSMenu
-
-        if cascade {
-            let subMenu = NSMenu(title: AppConstants.appName)
-            let topItem = NSMenuItem(title: AppConstants.appName, action: nil, keyEquivalent: "")
-            topItem.submenu = subMenu
-            if showIcons, let icon = NSImage(systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: nil) {
-                icon.isTemplate = true
-                topItem.image = icon
-            }
-            rootMenu.addItem(topItem)
-            containerMenu = subMenu
-        } else {
-            containerMenu = rootMenu
-        }
-
         var nextTag = 1
         var actionsByTag: [Int: MenuActionBox] = [:]
 
-        appendItems(
-            resolvedItems,
-            to: containerMenu,
-            showIcons: showIcons,
-            targetDirectoryPath: targetDirectoryPath,
-            selectedPaths: selectedPaths,
-            repoPath: repoPath,
-            target: target,
-            selector: selector,
-            nextTag: &nextTag,
-            actionsByTag: &actionsByTag
-        )
+        if cascade {
+            let partitioned = MenuVisibilityResolver.partitionForCascade(
+                items: resolvedItems,
+                topLevelActions: topLevelActions
+            )
+
+            appendItems(
+                partitioned.topLevel,
+                to: rootMenu,
+                showIcons: showIcons,
+                targetDirectoryPath: targetDirectoryPath,
+                selectedPaths: selectedPaths,
+                repoPath: repoPath,
+                target: target,
+                selector: selector,
+                nextTag: &nextTag,
+                actionsByTag: &actionsByTag
+            )
+
+            if !partitioned.submenu.isEmpty {
+                let subMenu = NSMenu(title: AppConstants.appName)
+                appendItems(
+                    partitioned.submenu,
+                    to: subMenu,
+                    showIcons: showIcons,
+                    targetDirectoryPath: targetDirectoryPath,
+                    selectedPaths: selectedPaths,
+                    repoPath: repoPath,
+                    target: target,
+                    selector: selector,
+                    nextTag: &nextTag,
+                    actionsByTag: &actionsByTag
+                )
+                let topItem = NSMenuItem(title: AppConstants.appName, action: nil, keyEquivalent: "")
+                topItem.submenu = subMenu
+                if showIcons {
+                    topItem.image = MenuActionIconRenderer.appBrandMenuIcon()
+                }
+                rootMenu.addItem(topItem)
+            }
+        } else {
+            appendItems(
+                resolvedItems,
+                to: rootMenu,
+                showIcons: showIcons,
+                targetDirectoryPath: targetDirectoryPath,
+                selectedPaths: selectedPaths,
+                repoPath: repoPath,
+                target: target,
+                selector: selector,
+                nextTag: &nextTag,
+                actionsByTag: &actionsByTag
+            )
+        }
 
         return (rootMenu, actionsByTag)
     }
@@ -87,10 +114,8 @@ enum MenuBuilder {
                 let menuItem = NSMenuItem(title: title, action: selector, keyEquivalent: "")
                 menuItem.target = target
                 menuItem.tag = tag
-                if showIcons,
-                   let img = NSImage(systemSymbolName: action.systemSymbolName, accessibilityDescription: nil) {
-                    img.isTemplate = true
-                    menuItem.image = img
+                if showIcons {
+                    menuItem.image = MenuActionIconRenderer.menuIcon(for: action)
                 }
                 menu.addItem(menuItem)
 
@@ -110,9 +135,8 @@ enum MenuBuilder {
                 )
                 let parentItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
                 parentItem.submenu = sub
-                if showIcons, let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-                    img.isTemplate = true
-                    parentItem.image = img
+                if showIcons {
+                    parentItem.image = MenuActionIconRenderer.submenuIcon(symbolName: symbolName)
                 }
                 menu.addItem(parentItem)
             }

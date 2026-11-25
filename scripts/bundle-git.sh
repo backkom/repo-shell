@@ -56,7 +56,7 @@ if [[ "${CODE_SIGNING_ALLOWED:-NO}" == "YES" && -n "${EXPANDED_CODE_SIGN_IDENTIT
   echo "Signing bundled git binaries with ${EXPANDED_CODE_SIGN_IDENTITY}..."
   find "${DEST_DIR}" -type f ! -type l -perm +111 | while IFS= read -r binfile; do
     if file -b "${binfile}" | grep -q "Mach-O"; then
-      /usr/bin/codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --timestamp=none "${binfile}"
+      /usr/bin/codesign --force --options runtime --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --timestamp=none "${binfile}"
     fi
   done
 fi

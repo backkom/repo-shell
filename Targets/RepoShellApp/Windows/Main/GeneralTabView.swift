@@ -46,6 +46,51 @@ struct GeneralTabView: View {
             // General Options
             Section(header: Text(L("General Options", "通用选项"))) {
                 Toggle(L("Cascade context menu items", "级联显示右键菜单项"), isOn: binding(\.cascadeMenu))
+                if repoManager.config.preferences.cascadeMenu {
+                    DisclosureGroup(L("Top-level context menu actions", "右键一级菜单常用操作")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(L(
+                                "Selected actions appear directly in Finder's top-level context menu; remaining actions stay in the RepoShell submenu.",
+                                "勾选的操作将直接显示在访达右键一级菜单中，其余操作收纳在 RepoShell 子菜单内。"
+                            ))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                            let loc = Localization(language: repoManager.config.preferences.language)
+                            LazyVGrid(
+                                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                                alignment: .leading,
+                                spacing: 6
+                            ) {
+                                ForEach(AppPreferences.promotableMenuActions, id: \.self) { action in
+                                    Toggle(isOn: topLevelActionBinding(action)) {
+                                        HStack(spacing: 6) {
+                                            Image(nsImage: MenuActionIconRenderer.menuIcon(for: action, size: 15))
+                                                .frame(width: 15, height: 15)
+                                            Text(loc.string(action.localizationKey))
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+
+                            HStack(spacing: 10) {
+                                Button(L("Reset Defaults", "恢复默认")) {
+                                    repoManager.updatePreferences { prefs in
+                                        prefs.topLevelMenuActions = AppPreferences.defaultTopLevelMenuActions
+                                    }
+                                }
+                                Button(L("All in Submenu", "全部收纳到子菜单")) {
+                                    repoManager.updatePreferences { prefs in
+                                        prefs.topLevelMenuActions = []
+                                    }
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
                 Toggle(L("Show icons in context menu", "在右键菜单中显示图标"), isOn: binding(\.showMenuIcons))
                 Toggle(L("Show in menu bar (hide Dock icon)", "在菜单栏中显示（不在 Dock 上显示）"), isOn: binding(\.showInMenuBar))
                 Toggle(L("Show preferences window on launch", "启动时显示此窗口"), isOn: binding(\.showPreferencesOnLaunch))
@@ -167,6 +212,23 @@ struct GeneralTabView: View {
                 }
                 if keyPath == \.useFinderTagsForCloudDrives || keyPath == \.useFinderTagsForLocalRepos {
                     AppContainer.shared.statusEngine.refreshAllRepositories()
+                }
+            }
+        )
+    }
+
+    private func topLevelActionBinding(_ action: MenuAction) -> Binding<Bool> {
+        Binding(
+            get: { repoManager.config.preferences.topLevelMenuActions.contains(action) },
+            set: { enabled in
+                repoManager.updatePreferences { prefs in
+                    var selected = Set(prefs.topLevelMenuActions)
+                    if enabled {
+                        selected.insert(action)
+                    } else {
+                        selected.remove(action)
+                    }
+                    prefs.topLevelMenuActions = AppPreferences.promotableMenuActions.filter { selected.contains($0) }
                 }
             }
         )

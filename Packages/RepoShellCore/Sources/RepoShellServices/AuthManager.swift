@@ -47,6 +47,20 @@ public final class AuthManager: @unchecked Sendable {
         }
     }
 
+    public static func systemAppleOsxKeychainHelperPath() -> String? {
+        let candidates = [
+            "/Library/Developer/CommandLineTools/usr/libexec/git-core/git-credential-osxkeychain",
+            "/Applications/Xcode.app/Contents/Developer/usr/libexec/git-core/git-credential-osxkeychain"
+        ]
+        let fm = FileManager.default
+        return candidates.first { fm.isExecutableFile(atPath: $0) }
+    }
+
+    public static func shellQuotedCredentialHelper(path: String) -> String {
+        let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
+        return "!'\(escaped)'"
+    }
+
     public func environment(for repoPath: String?) -> [String: String] {
         var env: [String: String] = [:]
         let cfg = storage.loadConfig()
@@ -75,15 +89,22 @@ public final class AuthManager: @unchecked Sendable {
             }
         }
 
+        // Reset inherited helpers so bundled re-signed `git-credential-osxkeychain` is never picked up,
+        // then invoke Apple's unmodified system helper (for `.none`) before falling back to RepoShell's helper.
+        var helpers: [String] = [""]
+        if repoAuthMode == .none {
+            helpers.append(Self.systemAppleOsxKeychainHelperPath().map(Self.shellQuotedCredentialHelper(path:)) ?? "osxkeychain")
+        }
         if let credURL = helperURL(named: AppConstants.credentialHelperName) {
-            // Configure git credential helper chain via GIT_CONFIG_* env vars (Git 2.31+):
-            // - For `.none` (system default), try macOS `osxkeychain` first, then fall back to RepoShell Askpass helper.
-            // - For `.userPassword`, clear inherited helpers first so per-repo Keychain credentials take precedence.
-            env["GIT_CONFIG_COUNT"] = "2"
-            env["GIT_CONFIG_KEY_0"] = "credential.helper"
-            env["GIT_CONFIG_VALUE_0"] = (repoAuthMode == .userPassword) ? "" : "osxkeychain"
-            env["GIT_CONFIG_KEY_1"] = "credential.helper"
-            env["GIT_CONFIG_VALUE_1"] = credURL.path
+            helpers.append(Self.shellQuotedCredentialHelper(path: credURL.path))
+        }
+
+        if helpers.count > 1 {
+            env["GIT_CONFIG_COUNT"] = "\(helpers.count)"
+            for (index, helper) in helpers.enumerated() {
+                env["GIT_CONFIG_KEY_\(index)"] = "credential.helper"
+                env["GIT_CONFIG_VALUE_\(index)"] = helper
+            }
         }
 
         return env
