@@ -1,0 +1,743 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		6EF9E31B687FC650CBDD6A6F /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFFE1F6EBC77CF481145E092; };
+		66F3912B2A6E1C9E813C6829 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B0A218368B5BC0066AC54D8; };
+		DFE3B53590CE8334CA8C8BAF /* WindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DBA2D3FD82FBF35E107291; };
+		6FCADFB6BEED21836F74E474 /* WindowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0FD9D048521105B0C5B66EB; };
+		F4FC5D71F2AE23D40EEA7B3B /* AuthWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FCDBD591781CE007D7CAA17; };
+		8E044289ABD0F15A5E47182C /* BlameWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524E8C50DBF8319886A63E01; };
+		B97AE82C0096B452D8728066 /* CherryPickWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31FE2F2A247D110CDFC5CAF4; };
+		C36D541294EF0629C7D26F00 /* CompareRevisionsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80332630D8F7CE250183BC5E; };
+		F44567923EFBB7B1E3A52007 /* ImageDiffWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65536109430E9AAAAB27EDC5; };
+		3A174465BDC2977B8E12D18F /* RebaseWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BCC9BEC0F6CA7E36372C4BF; };
+		FE0AE3C9D106F399EB5EFC20 /* RefLogWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F57A4DA5531A83B11F7D990B; };
+		4C650B65BEB7B71E24F23168 /* RepoBrowserWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77F452BD0379F10CA72EFE79; };
+		89217970391D858EC256F4CA /* SubmodulesWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF6BC50BA681DFA180CE7B76; };
+		9BC29848BCEBDA11F43A3FF2 /* UtilityDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB758B257EE0E7A8EB9A7B39; };
+		D8EC369B9E636677E8A53CBE /* BranchTagWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90C17F6488AA820EE7E1736; };
+		6435085251D4C6813010A905 /* CommitWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009307915F5BF8F72B333618; };
+		0AD0B1F50A1790A821D515B6 /* LogWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E49E0AEE2F29951C53AA964; };
+		E49A1267F6711F45075FE6DE /* ModificationsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06B82BB9B9B35CA90C55B3C7; };
+		104734CA4BB938EABE9AB95B /* RemoteSyncWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB88ED4CEBFD2B4594EEF68D; };
+		E7B127C975E65DE49788485E /* WorkingTreeDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F549DF7C42E475F80E22B1; };
+		AC18AB5AA94485B7F76C2BBB /* GeneralTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C81D4F588D74EA409C7834D; };
+		43F49207C3FF2362D9AD6889 /* GitTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7675E838DDDDAAA3B870B8AF; };
+		003D7476DB3B55B765F1346D /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 213DE6277D262C66E6A11B92; };
+		94A6DD4EE952F25788102B8E /* QuickActionsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23DF4A95F91E0C261E5CB26; };
+		6CF1D0D7AEC4FEE661A80673 /* RepositoriesTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E19487D08B4B921C2FF3A7AF; };
+		FB96AB2F23BA113AE788F5FB /* SetupWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 650A5C0C5E68CCE017455615; };
+		8B3E816BF4F2E3D627769E72 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 6806396CD2A3EB5AEE60C56E; };
+		A7398271DC49B8DA054B676A /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B4F9001FEF5406956D64F3DB; };
+		34C0C68D48B3DD92D22172A1 /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12B7D808B2CD1CE7040CE38C; };
+		AC7A313094E9A4C75F27F051 /* RepoShellShared in Frameworks */ = {isa = PBXBuildFile; productRef = 9DD9B9AAEF165F3F7F811424; };
+		705F871A474BBFD5762BA1CF /* RepoShellVcs in Frameworks */ = {isa = PBXBuildFile; productRef = 24B5FEE55CEA46983915F58A; };
+		66EC37DBEF20F955B34C14A5 /* RepoShellServices in Frameworks */ = {isa = PBXBuildFile; productRef = 24B882C2C6D3D090EC14E794; };
+		F704FFFB782A28A17549C1AB /* RepoShellFinderSync.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 822A8726E84EF28E7B87CD75; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5FAB02C2A334EE6AD0BD7773 /* git-credential-reposhell in Embed Helpers */ = {isa = PBXBuildFile; fileRef = D978772F45EBB93D36BAE548; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		8BAA1ADF680ED50754ECAC65 /* reposhell-askpass in Embed Helpers */ = {isa = PBXBuildFile; fileRef = 9FD328236C9EFCA2B968033C; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		E208181EAA0669BA8D0BC3B4 /* git-sequence-editor.sh in Copy Scripts */ = {isa = PBXBuildFile; fileRef = D9228C4402007D35DB07D6AF; };
+		21935100C03A6C6B0DEEC7F7 /* git-message-editor.sh in Copy Scripts */ = {isa = PBXBuildFile; fileRef = FDE4FC3A5ECB2D28E872DD83; };
+		C436BD13C1FCABEE04789212 /* quickaction-runner.sh in Copy Scripts */ = {isa = PBXBuildFile; fileRef = DCB1888290FC6761F12848D4; };
+		5971F350ECAB6482776BC28B /* BadgeAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF340F15A61D185E131622BA; };
+		3AF25659BFC819AAFD37B1A5 /* FinderSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A342BCA8095E72C8224B9C11; };
+		5DBCF4AD27514DF6A67CB00F /* MenuBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E73F2F2E7392215C7456CD66; };
+		E3F45C5025310983A71EB418 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B4F9001FEF5406956D64F3DB; };
+		7FE9B5899AC1279EAB9242DF /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12B7D808B2CD1CE7040CE38C; };
+		3FA00B4FBE7AAB5A943ECBAF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F34318CDE04EC687A6FC938; };
+		E9200C880C3D91B3C9DEB21F /* RepoShellShared in Frameworks */ = {isa = PBXBuildFile; productRef = 26ACE1BBBFFC04FCDCE3B9FF; };
+		72D2AFF7CC793B525AE0B4DA /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63442B54E8734156857FF0A3; };
+		6CA94A2C6D2DF4F554F04D62 /* RepoShellShared in Frameworks */ = {isa = PBXBuildFile; productRef = 9C62CBBD21CB5BFD74508AAC; };
+		7E1310BE6D824E0B0831FF18 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B393992F230FB8FCBBA8857D; };
+		C9203C07EE85BDC473A98CCC /* RepoShellShared in Frameworks */ = {isa = PBXBuildFile; productRef = E12AA8F73B532AEFD1D4F56D; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		EF7079F64756707F95D6E4B0 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 1F299B3DF185D7D164B8F85F; proxyType = 1; remoteGlobalIDString = 38CD8076DCF79572F141518D; remoteInfo = "RepoShellFinderSync"; };
+		F352EB6CA801BE33D0F8EC16 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 1F299B3DF185D7D164B8F85F; proxyType = 1; remoteGlobalIDString = CD1BB1881D5F484AE7C4D467; remoteInfo = "git-credential-reposhell"; };
+		834906BCC92DB40EB2D9A611 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 1F299B3DF185D7D164B8F85F; proxyType = 1; remoteGlobalIDString = E31A3F01F4985B8AD16BC9C8; remoteInfo = "reposhell-askpass"; };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		93026B40181968795B98FDC5 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F704FFFB782A28A17549C1AB /* RepoShellFinderSync.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C3396AC9D5F5FF67270EF1B /* Embed Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Helpers;
+			dstSubfolderSpec = 1;
+			files = (
+				5FAB02C2A334EE6AD0BD7773,
+				8BAA1ADF680ED50754ECAC65,
+			);
+			name = "Embed Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1168066AB720B6394E86155 /* Copy Scripts */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Scripts;
+			dstSubfolderSpec = 7;
+			files = (
+				E208181EAA0669BA8D0BC3B4,
+				21935100C03A6C6B0DEEC7F7,
+				C436BD13C1FCABEE04789212,
+			);
+			name = "Copy Scripts";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		CFFE1F6EBC77CF481145E092 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/AppContainer.swift"; sourceTree = "<group>"; };
+		5B0A218368B5BC0066AC54D8 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/AppDelegate.swift"; sourceTree = "<group>"; };
+		92DBA2D3FD82FBF35E107291 /* WindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/WindowCoordinator.swift"; sourceTree = "<group>"; };
+		B0FD9D048521105B0C5B66EB /* WindowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/WindowHost.swift"; sourceTree = "<group>"; };
+		8FCDBD591781CE007D7CAA17 /* AuthWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/AuthWindows.swift"; sourceTree = "<group>"; };
+		524E8C50DBF8319886A63E01 /* BlameWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/BlameWindows.swift"; sourceTree = "<group>"; };
+		31FE2F2A247D110CDFC5CAF4 /* CherryPickWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/CherryPickWindowView.swift"; sourceTree = "<group>"; };
+		80332630D8F7CE250183BC5E /* CompareRevisionsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/CompareRevisionsWindowView.swift"; sourceTree = "<group>"; };
+		65536109430E9AAAAB27EDC5 /* ImageDiffWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/ImageDiffWindowView.swift"; sourceTree = "<group>"; };
+		7BCC9BEC0F6CA7E36372C4BF /* RebaseWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/RebaseWindowView.swift"; sourceTree = "<group>"; };
+		F57A4DA5531A83B11F7D990B /* RefLogWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/RefLogWindowView.swift"; sourceTree = "<group>"; };
+		77F452BD0379F10CA72EFE79 /* RepoBrowserWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/RepoBrowserWindowView.swift"; sourceTree = "<group>"; };
+		EF6BC50BA681DFA180CE7B76 /* SubmodulesWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/SubmodulesWindows.swift"; sourceTree = "<group>"; };
+		CB758B257EE0E7A8EB9A7B39 /* UtilityDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/UtilityDialogs.swift"; sourceTree = "<group>"; };
+		A90C17F6488AA820EE7E1736 /* BranchTagWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Basic/BranchTagWindows.swift"; sourceTree = "<group>"; };
+		009307915F5BF8F72B333618 /* CommitWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Basic/CommitWindowView.swift"; sourceTree = "<group>"; };
+		0E49E0AEE2F29951C53AA964 /* LogWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Basic/LogWindowView.swift"; sourceTree = "<group>"; };
+		06B82BB9B9B35CA90C55B3C7 /* ModificationsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Basic/ModificationsWindowView.swift"; sourceTree = "<group>"; };
+		EB88ED4CEBFD2B4594EEF68D /* RemoteSyncWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Basic/RemoteSyncWindows.swift"; sourceTree = "<group>"; };
+		D9F549DF7C42E475F80E22B1 /* WorkingTreeDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Basic/WorkingTreeDialogs.swift"; sourceTree = "<group>"; };
+		6C81D4F588D74EA409C7834D /* GeneralTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/GeneralTabView.swift"; sourceTree = "<group>"; };
+		7675E838DDDDAAA3B870B8AF /* GitTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/GitTabView.swift"; sourceTree = "<group>"; };
+		213DE6277D262C66E6A11B92 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/MainWindowView.swift"; sourceTree = "<group>"; };
+		B23DF4A95F91E0C261E5CB26 /* QuickActionsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/QuickActionsTabView.swift"; sourceTree = "<group>"; };
+		E19487D08B4B921C2FF3A7AF /* RepositoriesTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/RepositoriesTabView.swift"; sourceTree = "<group>"; };
+		650A5C0C5E68CCE017455615 /* SetupWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/SetupWizardView.swift"; sourceTree = "<group>"; };
+		FF340F15A61D185E131622BA /* BadgeAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellFinderSync/BadgeAssets.swift"; sourceTree = "<group>"; };
+		A342BCA8095E72C8224B9C11 /* FinderSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellFinderSync/FinderSync.swift"; sourceTree = "<group>"; };
+		E73F2F2E7392215C7456CD66 /* MenuBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellFinderSync/MenuBuilder.swift"; sourceTree = "<group>"; };
+		63442B54E8734156857FF0A3 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/Helpers/GitCredentialHelper/main.swift"; sourceTree = "<group>"; };
+		B393992F230FB8FCBBA8857D /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/Helpers/AskpassHelper/main.swift"; sourceTree = "<group>"; };
+		B54297522C284BB4FE2D8EEF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Targets/RepoShellApp/Info.plist"; sourceTree = "<group>"; };
+		BF84F57B50E4AC557E7B8520 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Targets/RepoShellFinderSync/Info.plist"; sourceTree = "<group>"; };
+		A7C956567A53A2FA16960468 /* RepoShellFinderSync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Targets/RepoShellFinderSync/RepoShellFinderSync.entitlements"; sourceTree = "<group>"; };
+		6806396CD2A3EB5AEE60C56E /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = "Resources/Assets/AppIcon.icns"; sourceTree = "<group>"; };
+		9F5F208C3093B049B6ECAF15 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "en"; path = "Resources/en.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		7119AF8BDB8D2EC5F6D1582A /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Resources/zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		D9228C4402007D35DB07D6AF /* git-sequence-editor.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "Resources/Scripts/git-sequence-editor.sh"; sourceTree = "<group>"; };
+		FDE4FC3A5ECB2D28E872DD83 /* git-message-editor.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "Resources/Scripts/git-message-editor.sh"; sourceTree = "<group>"; };
+		DCB1888290FC6761F12848D4 /* quickaction-runner.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "Resources/Scripts/quickaction-runner.sh"; sourceTree = "<group>"; };
+		BEA45C78AD9B4077CA126F59 /* RepoShell.app */ = {isa = PBXFileReference; lastKnownFileType = wrapper.application; path = "RepoShell.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		822A8726E84EF28E7B87CD75 /* RepoShellFinderSync.appex */ = {isa = PBXFileReference; lastKnownFileType = wrapper.app-extension; path = "RepoShellFinderSync.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D978772F45EBB93D36BAE548 /* git-credential-reposhell */ = {isa = PBXFileReference; lastKnownFileType = compiled.mach-o.executable; path = "git-credential-reposhell"; sourceTree = BUILT_PRODUCTS_DIR; };
+		9FD328236C9EFCA2B968033C /* reposhell-askpass */ = {isa = PBXFileReference; lastKnownFileType = compiled.mach-o.executable; path = "reposhell-askpass"; sourceTree = BUILT_PRODUCTS_DIR; };
+		12B7D808B2CD1CE7040CE38C /* FinderSync.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = "System/Library/Frameworks/FinderSync.framework"; sourceTree = SDKROOT; };
+		5F34318CDE04EC687A6FC938 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = "System/Library/Frameworks/Cocoa.framework"; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F001BC2AF9EB5498B3360756 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				34C0C68D48B3DD92D22172A1,
+				AC7A313094E9A4C75F27F051,
+				705F871A474BBFD5762BA1CF,
+				66EC37DBEF20F955B34C14A5,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		30DF5DB2668C55DBD174B4FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7FE9B5899AC1279EAB9242DF,
+				3FA00B4FBE7AAB5A943ECBAF,
+				E9200C880C3D91B3C9DEB21F,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB76DF9E2A8682E9F5497651 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6CA94A2C6D2DF4F554F04D62,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		697796C650683284256B2F18 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C9203C07EE85BDC473A98CCC,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ADCF10F76EBF2A74473E9DC4 = {
+			isa = PBXGroup;
+			children = (
+				CEC86142D150934D582CC7FF /* Targets */,
+				A024F06580C79B7582C3806A /* Resources */,
+				2D17C89EB2C5B87E8B0EC3B6 /* Frameworks */,
+				5151B46607EBC8890D8DFCC2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CEC86142D150934D582CC7FF /* Targets */ = {
+			isa = PBXGroup;
+			children = (
+				CFFE1F6EBC77CF481145E092,
+				5B0A218368B5BC0066AC54D8,
+				92DBA2D3FD82FBF35E107291,
+				B0FD9D048521105B0C5B66EB,
+				8FCDBD591781CE007D7CAA17,
+				524E8C50DBF8319886A63E01,
+				31FE2F2A247D110CDFC5CAF4,
+				80332630D8F7CE250183BC5E,
+				65536109430E9AAAAB27EDC5,
+				7BCC9BEC0F6CA7E36372C4BF,
+				F57A4DA5531A83B11F7D990B,
+				77F452BD0379F10CA72EFE79,
+				EF6BC50BA681DFA180CE7B76,
+				CB758B257EE0E7A8EB9A7B39,
+				A90C17F6488AA820EE7E1736,
+				009307915F5BF8F72B333618,
+				0E49E0AEE2F29951C53AA964,
+				06B82BB9B9B35CA90C55B3C7,
+				EB88ED4CEBFD2B4594EEF68D,
+				D9F549DF7C42E475F80E22B1,
+				6C81D4F588D74EA409C7834D,
+				7675E838DDDDAAA3B870B8AF,
+				213DE6277D262C66E6A11B92,
+				B23DF4A95F91E0C261E5CB26,
+				E19487D08B4B921C2FF3A7AF,
+				650A5C0C5E68CCE017455615,
+				B54297522C284BB4FE2D8EEF,
+				FF340F15A61D185E131622BA,
+				A342BCA8095E72C8224B9C11,
+				E73F2F2E7392215C7456CD66,
+				BF84F57B50E4AC557E7B8520,
+				A7C956567A53A2FA16960468,
+				63442B54E8734156857FF0A3,
+				B393992F230FB8FCBBA8857D,
+			);
+			name = Targets;
+			sourceTree = "<group>";
+		};
+		A024F06580C79B7582C3806A /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				6806396CD2A3EB5AEE60C56E,
+				B4F9001FEF5406956D64F3DB,
+				D9228C4402007D35DB07D6AF,
+				FDE4FC3A5ECB2D28E872DD83,
+				DCB1888290FC6761F12848D4,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		2D17C89EB2C5B87E8B0EC3B6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				12B7D808B2CD1CE7040CE38C,
+				5F34318CDE04EC687A6FC938,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		5151B46607EBC8890D8DFCC2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BEA45C78AD9B4077CA126F59,
+				822A8726E84EF28E7B87CD75,
+				D978772F45EBB93D36BAE548,
+				9FD328236C9EFCA2B968033C,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CD37A5EF69F14EBA5A4CFF2A /* RepoShell */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 23746EFE221170E24101FE05;
+			buildPhases = (
+				8682261519D15BD64A9E5D31 /* Sources */,
+				F001BC2AF9EB5498B3360756 /* Frameworks */,
+				E28FAD8F60ECDED9B4AD087A /* Resources */,
+				93026B40181968795B98FDC5 /* Embed App Extensions */,
+				5C3396AC9D5F5FF67270EF1B /* Embed Helpers */,
+				C1168066AB720B6394E86155 /* Copy Scripts */,
+				A91EDAAB9A3900F02532D48E /* Bundle Git */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BD63DA44ED85CA87C8D780E2,
+				8A39930C7C504FBD11492A4E,
+				F2E0CA7407F4D9E792B6E5DC,
+			);
+			name = RepoShell;
+			packageProductDependencies = (
+				9DD9B9AAEF165F3F7F811424,
+				24B5FEE55CEA46983915F58A,
+				24B882C2C6D3D090EC14E794,
+			);
+			productName = RepoShell;
+			productReference = BEA45C78AD9B4077CA126F59;
+			productType = "com.apple.product-type.application";
+		};
+		38CD8076DCF79572F141518D /* RepoShellFinderSync */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37D8ED7E760A9557D89E0E50;
+			buildPhases = (
+				597FD57E57ED99CEBFF1BB02 /* Sources */,
+				30DF5DB2668C55DBD174B4FC /* Frameworks */,
+				3F447DE10FA5EDEA89764824 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RepoShellFinderSync;
+			packageProductDependencies = (
+				26ACE1BBBFFC04FCDCE3B9FF,
+			);
+			productName = RepoShellFinderSync;
+			productReference = 822A8726E84EF28E7B87CD75;
+			productType = "com.apple.product-type.app-extension";
+		};
+		CD1BB1881D5F484AE7C4D467 /* git-credential-reposhell */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 853320E77F4FE4640A756841;
+			buildPhases = (
+				639B686B710BF80C9110765B /* Sources */,
+				CB76DF9E2A8682E9F5497651 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "git-credential-reposhell";
+			packageProductDependencies = (
+				9C62CBBD21CB5BFD74508AAC,
+			);
+			productName = "git-credential-reposhell";
+			productReference = D978772F45EBB93D36BAE548;
+			productType = "com.apple.product-type.tool";
+		};
+		E31A3F01F4985B8AD16BC9C8 /* reposhell-askpass */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2D27F075867EAA37F829A52D;
+			buildPhases = (
+				A679188212F83CE2E23C67EB /* Sources */,
+				697796C650683284256B2F18 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "reposhell-askpass";
+			packageProductDependencies = (
+				E12AA8F73B532AEFD1D4F56D,
+			);
+			productName = "reposhell-askpass";
+			productReference = 9FD328236C9EFCA2B968033C;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1F299B3DF185D7D164B8F85F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					CD37A5EF69F14EBA5A4CFF2A = { CreatedOnToolsVersion = 15.0; };
+					38CD8076DCF79572F141518D = { CreatedOnToolsVersion = 15.0; };
+					CD1BB1881D5F484AE7C4D467 = { CreatedOnToolsVersion = 15.0; };
+					E31A3F01F4985B8AD16BC9C8 = { CreatedOnToolsVersion = 15.0; };
+				};
+			};
+			buildConfigurationList = B0D3B7D22269663DD77FCD84;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				"zh-Hans",
+			);
+			mainGroup = ADCF10F76EBF2A74473E9DC4;
+			packageReferences = (
+				CBCF29BE0F361071E808EC1B /* XCLocalSwiftPackageReference "Packages/RepoShellCore" */,
+			);
+			productRefGroup = 5151B46607EBC8890D8DFCC2;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CD37A5EF69F14EBA5A4CFF2A /* RepoShell */,
+				38CD8076DCF79572F141518D /* RepoShellFinderSync */,
+				CD1BB1881D5F484AE7C4D467 /* git-credential-reposhell */,
+				E31A3F01F4985B8AD16BC9C8 /* reposhell-askpass */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E28FAD8F60ECDED9B4AD087A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8B3E816BF4F2E3D627769E72,
+				A7398271DC49B8DA054B676A,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F447DE10FA5EDEA89764824 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E3F45C5025310983A71EB418,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A91EDAAB9A3900F02532D48E /* Bundle Git */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle Git";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "bash \"${SRCROOT}/scripts/bundle-git.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8682261519D15BD64A9E5D31 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6EF9E31B687FC650CBDD6A6F,
+				66F3912B2A6E1C9E813C6829,
+				DFE3B53590CE8334CA8C8BAF,
+				6FCADFB6BEED21836F74E474,
+				F4FC5D71F2AE23D40EEA7B3B,
+				8E044289ABD0F15A5E47182C,
+				B97AE82C0096B452D8728066,
+				C36D541294EF0629C7D26F00,
+				F44567923EFBB7B1E3A52007,
+				3A174465BDC2977B8E12D18F,
+				FE0AE3C9D106F399EB5EFC20,
+				4C650B65BEB7B71E24F23168,
+				89217970391D858EC256F4CA,
+				9BC29848BCEBDA11F43A3FF2,
+				D8EC369B9E636677E8A53CBE,
+				6435085251D4C6813010A905,
+				0AD0B1F50A1790A821D515B6,
+				E49A1267F6711F45075FE6DE,
+				104734CA4BB938EABE9AB95B,
+				E7B127C975E65DE49788485E,
+				AC18AB5AA94485B7F76C2BBB,
+				43F49207C3FF2362D9AD6889,
+				003D7476DB3B55B765F1346D,
+				94A6DD4EE952F25788102B8E,
+				6CF1D0D7AEC4FEE661A80673,
+				FB96AB2F23BA113AE788F5FB,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		597FD57E57ED99CEBFF1BB02 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5971F350ECAB6482776BC28B,
+				3AF25659BFC819AAFD37B1A5,
+				5DBCF4AD27514DF6A67CB00F,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		639B686B710BF80C9110765B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				72D2AFF7CC793B525AE0B4DA,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A679188212F83CE2E23C67EB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E1310BE6D824E0B0831FF18,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BD63DA44ED85CA87C8D780E2 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 38CD8076DCF79572F141518D; targetProxy = EF7079F64756707F95D6E4B0; };
+		8A39930C7C504FBD11492A4E /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = CD1BB1881D5F484AE7C4D467; targetProxy = F352EB6CA801BE33D0F8EC16; };
+		F2E0CA7407F4D9E792B6E5DC /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = E31A3F01F4985B8AD16BC9C8; targetProxy = 834906BCC92DB40EB2D9A611; };
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		B4F9001FEF5406956D64F3DB /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				9F5F208C3093B049B6ECAF15 /* en */,
+				7119AF8BDB8D2EC5F6D1582A /* zh-Hans */,
+			);
+			name = "Localizable.strings";
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		6A7A9C00E9D82F8B527AF6B5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = YM3PT5F5G4;
+				ENABLE_DEBUG_DYLIB = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		01172647D9872636A9E33D38 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = YM3PT5F5G4;
+				ENABLE_DEBUG_DYLIB = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		967DE5DAE8F9C3546488D3FD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = "Targets/RepoShellApp/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leaf.reposhell";
+				PRODUCT_NAME = RepoShell;
+			};
+			name = Debug;
+		};
+		70A5F3AAC43D0790B57ED51A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = "Targets/RepoShellApp/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leaf.reposhell";
+				PRODUCT_NAME = RepoShell;
+			};
+			name = Release;
+		};
+		3E65CD39BD3F94C3918904FE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Targets/RepoShellFinderSync/RepoShellFinderSync.entitlements";
+				ENABLE_APP_SANDBOX = YES;
+				INFOPLIST_FILE = "Targets/RepoShellFinderSync/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leaf.reposhell.FinderSync";
+				PRODUCT_NAME = RepoShellFinderSync;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		35491E2C810F1CDC94061AC5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Targets/RepoShellFinderSync/RepoShellFinderSync.entitlements";
+				ENABLE_APP_SANDBOX = YES;
+				INFOPLIST_FILE = "Targets/RepoShellFinderSync/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.leaf.reposhell.FinderSync";
+				PRODUCT_NAME = RepoShellFinderSync;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		738067A1E33D98CACBBC6CFA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "git-credential-reposhell";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		407C856312B560D9B7A811A2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "git-credential-reposhell";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		AD131622C6D4EF644AC195BD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "reposhell-askpass";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		1ABD1ED7F9B070CC86CABB5A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "reposhell-askpass";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B0D3B7D22269663DD77FCD84 /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6A7A9C00E9D82F8B527AF6B5 /* Debug */,
+				01172647D9872636A9E33D38 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		23746EFE221170E24101FE05 /* Build configuration list for PBXNativeTarget RepoShell */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				967DE5DAE8F9C3546488D3FD /* Debug */,
+				70A5F3AAC43D0790B57ED51A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37D8ED7E760A9557D89E0E50 /* Build configuration list for PBXNativeTarget RepoShellFinderSync */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3E65CD39BD3F94C3918904FE /* Debug */,
+				35491E2C810F1CDC94061AC5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		853320E77F4FE4640A756841 /* Build configuration list for PBXNativeTarget git-credential-reposhell */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				738067A1E33D98CACBBC6CFA /* Debug */,
+				407C856312B560D9B7A811A2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2D27F075867EAA37F829A52D /* Build configuration list for PBXNativeTarget reposhell-askpass */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AD131622C6D4EF644AC195BD /* Debug */,
+				1ABD1ED7F9B070CC86CABB5A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		CBCF29BE0F361071E808EC1B /* XCLocalSwiftPackageReference "Packages/RepoShellCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/RepoShellCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9DD9B9AAEF165F3F7F811424 /* RepoShellShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CBCF29BE0F361071E808EC1B;
+			productName = RepoShellShared;
+		};
+		24B5FEE55CEA46983915F58A /* RepoShellVcs */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CBCF29BE0F361071E808EC1B;
+			productName = RepoShellVcs;
+		};
+		24B882C2C6D3D090EC14E794 /* RepoShellServices */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CBCF29BE0F361071E808EC1B;
+			productName = RepoShellServices;
+		};
+		26ACE1BBBFFC04FCDCE3B9FF /* RepoShellShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CBCF29BE0F361071E808EC1B;
+			productName = RepoShellShared;
+		};
+		9C62CBBD21CB5BFD74508AAC /* RepoShellShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CBCF29BE0F361071E808EC1B;
+			productName = RepoShellShared;
+		};
+		E12AA8F73B532AEFD1D4F56D /* RepoShellShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CBCF29BE0F361071E808EC1B;
+			productName = RepoShellShared;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+	};
+	rootObject = 1F299B3DF185D7D164B8F85F /* Project object */;
+}
