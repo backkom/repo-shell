@@ -52,11 +52,15 @@ struct RepositoriesTabView: View {
                             .padding(.vertical, 16)
                     } else {
                         ForEach(filteredRepositories) { repo in
-                            RepositoryRowView(repo: repo)
-                                .tag(repo.id)
-                                .contextMenu {
-                                    repoContextMenu(for: repo)
+                            RepositoryRowView(repo: repo) {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    repoManager.toggleStar(id: repo.id)
                                 }
+                            }
+                            .tag(repo.id)
+                            .contextMenu {
+                                repoContextMenu(for: repo)
+                            }
                         }
                     }
                 }
@@ -251,11 +255,11 @@ struct RepositoriesTabView: View {
     }
 
     private var gitRepositories: [RepositoryEntry] {
-        repoManager.config.repositories.filter { $0.vcsType == .git }
+        RepositoryEntry.sortedForDisplay(repoManager.config.repositories.filter { $0.vcsType == .git })
     }
 
     private var svnRepositories: [RepositoryEntry] {
-        repoManager.config.repositories.filter { $0.vcsType == .svn }
+        RepositoryEntry.sortedForDisplay(repoManager.config.repositories.filter { $0.vcsType == .svn })
     }
 
     private var filteredRepositories: [RepositoryEntry] {
@@ -316,6 +320,12 @@ struct RepositoriesTabView: View {
                 NSPasteboard.general.setString(repo.path, forType: .string)
             }
             Divider()
+            Button(repo.isStarred ? L("Remove Star", "取消星标") : L("Star & Pin to Top", "星标置顶")) {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    repoManager.toggleStar(id: repo.id)
+                }
+            }
+            Divider()
             Button(L("Remove", "移除")) {
                 repoManager.removeRepository(id: repo.id)
             }
@@ -351,6 +361,12 @@ struct RepositoriesTabView: View {
                 NSPasteboard.general.setString(repo.path, forType: .string)
             }
             Divider()
+            Button(repo.isStarred ? L("Remove Star", "取消星标") : L("Star & Pin to Top", "星标置顶")) {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    repoManager.toggleStar(id: repo.id)
+                }
+            }
+            Divider()
             Button(L("Remove", "移除")) {
                 repoManager.removeRepository(id: repo.id)
             }
@@ -381,6 +397,8 @@ struct RepositoriesTabView: View {
 
 private struct RepositoryRowView: View {
     let repo: RepositoryEntry
+    let onToggleStar: () -> Void
+    @State private var isStarHovered = false
 
     var body: some View {
         let snap = AppContainer.shared.storage.loadStatusSnapshot(for: repo.path)
@@ -416,6 +434,20 @@ private struct RepositoryRowView: View {
                     .truncationMode(.middle)
             }
             Spacer()
+            Button(action: onToggleStar) {
+                Image(systemName: repo.isStarred ? "star.fill" : "star")
+                    .font(.system(size: 13))
+                    .foregroundColor(
+                        repo.isStarred
+                            ? Color(red: 0.96, green: 0.68, blue: 0.08)
+                            : Color.secondary.opacity(isStarHovered ? 0.85 : 0.4)
+                    )
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { isStarHovered = $0 }
+            .help(repo.isStarred ? L("Remove Star", "取消星标") : L("Star & Pin to Top", "星标置顶"))
         }
         .padding(.vertical, 2)
     }

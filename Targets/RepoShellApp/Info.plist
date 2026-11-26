@@ -34,7 +34,15 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>0.1.0</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 leaf (flying_butterfly@126.com)</string>
+	<key>RepoShellDeveloperName</key>
+	<string>leaf</string>
+	<key>RepoShellDeveloperEmail</key>
+	<string>flying_butterfly@126.com</string>
+	<key>RepoShellGitHubRepo</key>
+	<string>backkom/repo-shell</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

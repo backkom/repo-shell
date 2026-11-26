@@ -57,6 +57,10 @@ public final class SharedStorage: @unchecked Sendable {
         baseDirectoryURL.appendingPathComponent("history.json", isDirectory: false)
     }
 
+    public var updateStateURL: URL {
+        baseDirectoryURL.appendingPathComponent("update-state.json", isDirectory: false)
+    }
+
     public func cacheFileURL(for repoPath: String) -> URL {
         let hash = PathUtils.repoHash(for: repoPath)
         return cacheDirectoryURL.appendingPathComponent("\(hash).json", isDirectory: false)
@@ -168,6 +172,25 @@ public final class SharedStorage: @unchecked Sendable {
                 try writeAtomic(state, to: diffLaterURL)
             } else if fileManager.fileExists(atPath: diffLaterURL.path) {
                 try fileManager.removeItem(at: diffLaterURL)
+            }
+        }
+    }
+
+    // MARK: - Update State
+
+    public func loadUpdateState() -> AppUpdateState? {
+        queue.sync {
+            guard let data = try? Data(contentsOf: updateStateURL) else { return nil }
+            return try? decoder.decode(AppUpdateState.self, from: data)
+        }
+    }
+
+    public func saveUpdateState(_ state: AppUpdateState?) throws {
+        try queue.sync(flags: .barrier) {
+            if let state = state {
+                try writeAtomic(state, to: updateStateURL)
+            } else if fileManager.fileExists(atPath: updateStateURL.path) {
+                try fileManager.removeItem(at: updateStateURL)
             }
         }
     }

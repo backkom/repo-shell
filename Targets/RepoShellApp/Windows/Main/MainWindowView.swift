@@ -4,14 +4,14 @@ import RepoShellShared
 enum MainTab: String, CaseIterable {
     case repositories
     case general
-    case git
-    case svn
+    case vcs
     case quickActions
 }
 
 struct MainWindowView: View {
     @State private var selectedTab: MainTab
     @ObservedObject private var repoManager = AppContainer.shared.repositoryManager
+    @ObservedObject private var updateController = AppContainer.shared.updateController
 
     init(initialTab: MainTab = .repositories) {
         _selectedTab = State(initialValue: initialTab)
@@ -19,15 +19,37 @@ struct MainWindowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let update = updateController.availableUpdate {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(String(
+                        format: L("New version v%@ is available (current %@).", "发现新版本 v%@（当前版本 %@）。"),
+                        update.latestVersion,
+                        AppConstants.currentVersion
+                    ))
+                    .font(.subheadline)
+                    Spacer()
+                    Button(L("Upgrade Now…", "立即升级…")) {
+                        updateController.startUpgrade()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.red.opacity(0.08))
+                Divider()
+            }
+
             Picker("", selection: $selectedTab) {
                 Label(L("Repositories", "工作副本"), systemImage: "folder.badge.gearshape")
                     .tag(MainTab.repositories)
                 Label(L("General", "通用"), systemImage: "gearshape")
                     .tag(MainTab.general)
-                Label("Git", systemImage: "arrow.triangle.branch")
-                    .tag(MainTab.git)
-                Label("SVN", systemImage: "server.rack")
-                    .tag(MainTab.svn)
+                Label("Git & SVN", systemImage: "arrow.triangle.branch")
+                    .tag(MainTab.vcs)
                 Label(L("Quick Actions", "快速操作"), systemImage: "bolt.circle")
                     .tag(MainTab.quickActions)
             }
@@ -44,10 +66,8 @@ struct MainWindowView: View {
                     RepositoriesTabView()
                 case .general:
                     GeneralTabView()
-                case .git:
-                    GitTabView()
-                case .svn:
-                    SvnTabView()
+                case .vcs:
+                    VcsSettingsTabView()
                 case .quickActions:
                     QuickActionsTabView()
                 }

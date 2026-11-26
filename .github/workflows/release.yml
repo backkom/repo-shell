@@ -1,0 +1,153 @@
+name: Build & Release macOS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS Universal App
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Show Toolchain Versions
+        run: |
+          xcodebuild -version
+          swift --version
+          git --version
+
+      - name: Run RepoShellCore Tests
+        run: |
+          cd Packages/RepoShellCore
+          swift test
+
+      - name: Determine Version & Build Number
+        id: version
+        run: |
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" == v* ]]; then
+            APP_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Targets/RepoShellApp/Info.plist)"
+          fi
+          BUILD_NUMBER="${GITHUB_RUN_NUMBER:-1}"
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${BUILD_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "Building RepoShell ${APP_VERSION} (${BUILD_NUMBER})"
+
+          # Sync version into Info.plist files for CI artifact
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" Targets/RepoShellApp/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" Targets/RepoShellApp/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" Targets/RepoShellFinderSync/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" Targets/RepoShellFinderSync/Info.plist
+
+      - name: Regenerate Xcode Project
+        run: |
+          python3 scripts/generate_xcodeproj.py
+
+      - name: Import Signing Certificate (Optional)
+        id: signing
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+        run: |
+          if [[ -n "${MACOS_CERTIFICATE_P12:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+            KEYCHAIN_PATH="${RUNNER_TEMP}/reposhell-ci.keychain-db"
+            KEYCHAIN_PASS="ci-temp-keychain-password"
+            CERT_PATH="${RUNNER_TEMP}/certificate.p12"
+
+            echo "${MACOS_CERTIFICATE_P12}" | base64 --decode > "${CERT_PATH}"
+            security create-keychain -p "${KEYCHAIN_PASS}" "${KEYCHAIN_PATH}"
+            security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+            security unlock-keychain -p "${KEYCHAIN_PASS}" "${KEYCHAIN_PATH}"
+            security import "${CERT_PATH}" -P "${MACOS_CERTIFICATE_PASSWORD:-}" -A -t cert -f pkcs12 -k "${KEYCHAIN_PATH}"
+            security list-keychain -d user -s "${KEYCHAIN_PATH}"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASS}" "${KEYCHAIN_PATH}"
+
+            echo "code_sign_identity=${APPLE_SIGN_IDENTITY:-Developer ID Application}" >> "$GITHUB_OUTPUT"
+            echo "code_sign_style=Manual" >> "$GITHUB_OUTPUT"
+            echo "development_team=${APPLE_TEAM_ID}" >> "$GITHUB_OUTPUT"
+          else
+            echo "No signing secrets configured; using ad-hoc signing."
+            echo "code_sign_identity=-" >> "$GITHUB_OUTPUT"
+            echo "code_sign_style=Manual" >> "$GITHUB_OUTPUT"
+            echo "development_team=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Universal RepoShell.app (arm64 + x86_64)
+        run: |
+          xcodebuild \
+            -project RepoShell.xcodeproj \
+            -scheme RepoShell \
+            -configuration Release \
+            -derivedDataPath build/DerivedData \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="${{ steps.version.outputs.app_version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build_number }}" \
+            CODE_SIGN_IDENTITY="${{ steps.signing.outputs.code_sign_identity }}" \
+            CODE_SIGN_STYLE="${{ steps.signing.outputs.code_sign_style }}" \
+            DEVELOPMENT_TEAM="${{ steps.signing.outputs.development_team }}" \
+            build
+
+      - name: Package macOS Release Archives (.zip & .dmg)
+        run: |
+          APP_VERSION="${{ steps.version.outputs.app_version }}"
+          APP_PATH="build/DerivedData/Build/Products/Release/RepoShell.app"
+          DIST_DIR="dist"
+          DMG_STAGE="${RUNNER_TEMP}/dmg-stage"
+
+          rm -rf "${DIST_DIR}" "${DMG_STAGE}"
+          mkdir -p "${DIST_DIR}" "${DMG_STAGE}"
+
+          codesign --verify --deep --strict --verbose=2 "${APP_PATH}" || true
+
+          ZIP_NAME="RepoShell-${APP_VERSION}-macOS.zip"
+          DMG_NAME="RepoShell-${APP_VERSION}-macOS.dmg"
+
+          ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${DIST_DIR}/${ZIP_NAME}"
+
+          ditto "${APP_PATH}" "${DMG_STAGE}/RepoShell.app"
+          ln -s /Applications "${DMG_STAGE}/Applications"
+          hdiutil create \
+            -volname "RepoShell ${APP_VERSION}" \
+            -srcfolder "${DMG_STAGE}" \
+            -ov \
+            -format UDZO \
+            "${DIST_DIR}/${DMG_NAME}"
+
+          (cd "${DIST_DIR}" && shasum -a 256 "${ZIP_NAME}" "${DMG_NAME}" > SHA256SUMS.txt)
+          ls -lh "${DIST_DIR}"
+
+      - name: Upload macOS Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RepoShell-${{ steps.version.outputs.app_version }}-macOS
+          path: dist/*
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/RepoShell-*.zip
+            dist/RepoShell-*.dmg
+            dist/SHA256SUMS.txt

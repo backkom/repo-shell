@@ -528,7 +528,7 @@ public final class SvnProvider: VcsProvider, @unchecked Sendable {
         return try SvnXmlParsers.parseDiffSummarizeXml(Data(res.stdout.utf8), baseURL: baseURL)
     }
 
-    // MARK: - Complete SnailSVN Feature Methods
+    // MARK: - SVN Extended Feature Methods
 
     public func info(
         target: String = ".",

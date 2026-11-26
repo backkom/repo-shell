@@ -9,6 +9,41 @@ public enum AppConstants {
     public static let appGroupID = "\(developmentTeamID).\(mainBundleID)"
     public static let urlScheme = "reposhell"
 
+    public static let developerName = "leaf"
+    public static let developerEmail = "flying_butterfly@126.com"
+    public static let defaultVersion = "0.1.0"
+    public static let defaultBuildNumber = "1"
+    public static let githubRepo = "backkom/repo-shell"
+    public static let copyright = "Copyright © 2026 leaf (flying_butterfly@126.com)"
+
+    public static var currentVersion: String {
+        if let ver = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+           !ver.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ver
+        }
+        return defaultVersion
+    }
+
+    public static var currentBuildNumber: String {
+        if let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+           !build.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return build
+        }
+        return defaultBuildNumber
+    }
+
+    public static var githubRepoSlug: String {
+        if let slug = Bundle.main.object(forInfoDictionaryKey: "RepoShellGitHubRepo") as? String,
+           !slug.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return slug.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return githubRepo
+    }
+
+    public static var githubRepositoryURL: URL {
+        URL(string: "https://github.com/\(githubRepoSlug)")!
+    }
+
     public static let credentialHelperName = "git-credential-reposhell"
     public static let askpassHelperName = "reposhell-askpass"
 
@@ -36,6 +71,7 @@ public enum AppConstants {
         case requestRefresh = "com.leaf.reposhell.requestRefresh"
         case diffLaterDidUpdate = "com.leaf.reposhell.diffLaterDidUpdate"
         case actionTriggered = "com.leaf.reposhell.actionTriggered"
+        case updateStateDidUpdate = "com.leaf.reposhell.updateStateDidUpdate"
 
         public var cfName: Notification.Name {
             Notification.Name(rawValue)

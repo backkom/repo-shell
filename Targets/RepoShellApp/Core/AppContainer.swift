@@ -22,6 +22,7 @@ final class AppContainer: ObservableObject {
     let hiddenFilesStore: HiddenFilesStore
     let recentHistoryStore: RecentHistoryStore
     let windowCoordinator: WindowCoordinator
+    let updateController: AppUpdateController
     private(set) var askpassServer: AskpassIPCServer?
 
     private init() {
@@ -51,10 +52,12 @@ final class AppContainer: ObservableObject {
         self.hiddenFilesStore = HiddenFilesStore(storage: storage)
         self.recentHistoryStore = RecentHistoryStore(storage: storage)
         self.windowCoordinator = WindowCoordinator()
+        self.updateController = AppUpdateController(storage: storage)
     }
 
     func startBackgroundServices() {
         statusEngine.start()
+        updateController.start()
         let server = AskpassIPCServer(storage: storage) { [weak self] request in
             guard let self = self else {
                 return AskpassIPCResponse(approved: false)
@@ -66,6 +69,7 @@ final class AppContainer: ObservableObject {
     }
 
     func stopBackgroundServices() {
+        updateController.stop()
         statusEngine.stop()
         askpassServer?.stop()
         askpassServer = nil
@@ -199,6 +203,11 @@ final class AppContainer: ObservableObject {
 }
 
 enum FinderExtensionHelper {
+    private static let pluginkitURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+    private static let lsregisterURL = URL(
+        fileURLWithPath: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    )
+
     static var appexURL: URL {
         Bundle.main.bundleURL
             .appendingPathComponent("Contents/PlugIns/RepoShellFinderSync.appex", isDirectory: true)
@@ -210,7 +219,7 @@ enum FinderExtensionHelper {
             return true
         }
         let output = try? await ProcessRunner.run(
-            executableURL: URL(fileURLWithPath: "/usr/bin/pluginkit"),
+            executableURL: pluginkitURL,
             arguments: ["-m", "-p", "com.apple.FinderSync"]
         )
         return output?.stdoutString
@@ -223,15 +232,121 @@ enum FinderExtensionHelper {
 
     @MainActor
     static func openManagementInterface() {
+        Task {
+            await repairRegistrationIfNeeded(force: false)
+        }
         FIFinderSyncController.showExtensionManagementInterface()
     }
 
-    static func enableNow() async -> Bool {
-        let pluginkitURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-        let path = appexURL.path
-        if FileManager.default.fileExists(atPath: path) {
-            _ = try? await ProcessRunner.run(executableURL: pluginkitURL, arguments: ["-a", path])
+    /// Removes stale PlugInKit/LaunchServices entries whose bundles no longer exist on disk
+    /// (which can shadow lower-version builds) and ensures the running bundle is registered.
+    static func repairRegistrationIfNeeded(force: Bool = false) async {
+        let fm = FileManager.default
+        let allOutput = try? await ProcessRunner.run(
+            executableURL: pluginkitURL,
+            arguments: ["-m", "-v", "-A", "-D", "-i", AppConstants.finderSyncBundleID]
+        )
+
+        var removedDeadRegistration = false
+        let registeredPaths = (allOutput?.stdoutString ?? "")
+            .components(separatedBy: .newlines)
+            .compactMap { line -> String? in
+                let cols = line.components(separatedBy: "\t")
+                guard cols.count >= 4 else { return nil }
+                let path = cols[3].trimmingCharacters(in: .whitespacesAndNewlines)
+                return path.hasPrefix("/") ? path : nil
+            }
+
+        for regPath in registeredPaths where !fm.fileExists(atPath: regPath) {
+            removedDeadRegistration = true
+            _ = try? await ProcessRunner.run(executableURL: pluginkitURL, arguments: ["-r", regPath])
+            if fm.fileExists(atPath: lsregisterURL.path) {
+                _ = try? await ProcessRunner.run(executableURL: lsregisterURL, arguments: ["-u", regPath])
+                if let range = regPath.range(of: "/Contents/PlugIns/") {
+                    let appPath = String(regPath[..<range.lowerBound])
+                    _ = try? await ProcessRunner.run(executableURL: lsregisterURL, arguments: ["-u", appPath])
+                }
+            }
         }
+
+        let activeOutput = try? await ProcessRunner.run(
+            executableURL: pluginkitURL,
+            arguments: ["-m", "-p", "com.apple.FinderSync"]
+        )
+        let isDiscoverable = activeOutput?.stdoutString
+            .components(separatedBy: .newlines)
+            .contains(where: { $0.contains(AppConstants.finderSyncBundleID) }) ?? false
+
+        guard force || removedDeadRegistration || !isDiscoverable else {
+            return
+        }
+
+        let appexPath = appexURL.path
+        if fm.fileExists(atPath: appexPath) {
+            if fm.fileExists(atPath: lsregisterURL.path) {
+                _ = try? await ProcessRunner.run(
+                    executableURL: lsregisterURL,
+                    arguments: ["-f", Bundle.main.bundleURL.path]
+                )
+            }
+            _ = try? await ProcessRunner.run(executableURL: pluginkitURL, arguments: ["-a", appexPath])
+        }
+
+        // LaunchServices can retain deleted higher-version app bundles that pluginkit -m -A hides
+        // while still shadowing the running bundle during default discovery.
+        let postOutput = try? await ProcessRunner.run(
+            executableURL: pluginkitURL,
+            arguments: ["-m", "-p", "com.apple.FinderSync"]
+        )
+        let discoverableNow = postOutput?.stdoutString
+            .components(separatedBy: .newlines)
+            .contains(where: { $0.contains(AppConstants.finderSyncBundleID) }) ?? false
+        if !discoverableNow, fm.fileExists(atPath: lsregisterURL.path) {
+            await unregisterMissingBundlesFromLaunchServices(fileManager: fm)
+            if fm.fileExists(atPath: appexPath) {
+                _ = try? await ProcessRunner.run(
+                    executableURL: lsregisterURL,
+                    arguments: ["-f", Bundle.main.bundleURL.path]
+                )
+                _ = try? await ProcessRunner.run(executableURL: pluginkitURL, arguments: ["-a", appexPath])
+            }
+        }
+    }
+
+    private static func unregisterMissingBundlesFromLaunchServices(fileManager fm: FileManager) async {
+        guard let dump = try? await ProcessRunner.run(
+            executableURL: lsregisterURL,
+            arguments: ["-dump"]
+        ) else {
+            return
+        }
+        var missingPaths = Set<String>()
+        for line in dump.stdoutString.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("path:") else { continue }
+            guard trimmed.contains("RepoShell.app") || trimmed.contains("RepoShellFinderSync.appex") else { continue }
+            let rawValue = trimmed.dropFirst("path:".count).trimmingCharacters(in: .whitespaces)
+            guard rawValue.hasPrefix("/") else { continue }
+            let cleanPath: String
+            if let suffixRange = rawValue.range(of: " (0x") {
+                cleanPath = String(rawValue[..<suffixRange.lowerBound])
+            } else {
+                cleanPath = rawValue
+            }
+            if !fm.fileExists(atPath: cleanPath) {
+                missingPaths.insert(cleanPath)
+            }
+        }
+        for path in missingPaths {
+            _ = try? await ProcessRunner.run(executableURL: lsregisterURL, arguments: ["-u", path])
+            if path.hasSuffix(".appex") {
+                _ = try? await ProcessRunner.run(executableURL: pluginkitURL, arguments: ["-r", path])
+            }
+        }
+    }
+
+    static func enableNow() async -> Bool {
+        await repairRegistrationIfNeeded(force: true)
         _ = try? await ProcessRunner.run(
             executableURL: pluginkitURL,
             arguments: ["-e", "use", "-i", AppConstants.finderSyncBundleID]

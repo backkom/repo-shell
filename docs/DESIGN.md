@@ -2,14 +2,13 @@
 
 > **版本**：V1.0（Git 完整版 + V2 SVN 架构预留）  
 > **目标平台**：macOS 13.0 (Ventura) 及以上（Apple Silicon / Universal）  
-> **复刻参考**：SnailGit Lite (v1.11.11) & SnailSVN (v1.10)  
 
 ---
 
 ## 第 1 章：项目概述与已确认设计决策
 
 ### 1.1 项目愿景
-**RepoShell** 是面向 macOS 的原生版本控制图形客户端与 Finder 深度集成工具，忠实复刻 SnailGit 与 SnailSVN 的经典 **Tortoise 风格**交互体验：日常轻量驻留（Dock 或系统菜单栏模式可切换），直接在 Finder 文件图标上叠加仓库文件状态角标，并通过 Finder 右键上下文菜单与 Finder 工具栏按钮快速唤出独立的任务窗口（Commit、Log、Modifications、Pull/Push/Fetch、Rebase、Cherry-Pick、Repo-browser 等）。
+**RepoShell** 是面向 macOS 的原生版本控制图形客户端与 Finder 深度集成工具，提供经典的 **Tortoise 风格**交互体验：日常轻量驻留（Dock 或系统菜单栏模式可切换），直接在 Finder 文件图标上叠加仓库文件状态角标，并通过 Finder 右键上下文菜单与 Finder 工具栏按钮快速唤出独立的任务窗口（Commit、Log、Modifications、Pull/Push/Fetch、Rebase、Cherry-Pick、Repo-browser 等）。
 
 ### 1.2 已确认核心设计决策清单
 
@@ -21,9 +20,9 @@
 | **4** | 技术栈 | **纯 Swift 原生（4-A）** | AppKit (`NSWindowController`、`NSStatusItem`、`FIFinderSync`) + SwiftUI（macOS 13 兼容 API）混合；零跨语言 FFI；核心逻辑封装在 `Packages/RepoShellCore` 中。 |
 | **5** | Git 引擎 | **自包含便携 Git + 外部切换（5-C）** | Bundle 内 `Contents/Resources/git/` 打包独立 relocatable `git`；支持首选项切换外部自定义 `git` 路径；提供发版编译脚本 `scripts/build-portable-git.sh`（13.0+ Universal）与本地打包脚本 `scripts/bundle-git.sh`。 |
 | **6** | 系统兼容 | **macOS 13.0 (Ventura)+（6-C）** | 全工程 `MACOSX_DEPLOYMENT_TARGET = 13.0`；严格禁止 `@Observable`、`ContentUnavailableView`、双参 `onChange` 等 macOS 14+ 独占 API。 |
-| **7** | Finder 集成 | **无限仓库 + 父目录自动发现 + 网盘兜底（7.1-A, 7.2-B）** | 解除 Lite 版单仓库限制；支持显式添加仓库、添加工作区父目录自动递归扫描、排除列表；V1 完整提供 **Finder 标签（Tags）状态着色**（网盘/本地独立开关）与 **Quick Actions（`.workflow`）安装管理**。 |
-| **8** | Diff / Merge | **外部工具生态 + 内置图片对比（8-A）** | 完整复刻 20+ 主流外部 Diff 工具与 10+ 外部 Merge 工具自动探测与变量模板调用；支持 `Diff later` / `Diff with "..."`；图片文件内置 `ImageDiffWindowController`（并排/叠加/分屏/差值）。 |
-| **9** | 身份验证 | **每仓库认证管理 + Keychain + Askpass（9-B）** | 复刻按仓库配置认证方式（无 / 用户名密码 / SSH 私钥+端口+口令）；macOS Keychain 存储；内置 `git-credential-reposhell` 与 `reposhell-askpass` 经本地 Unix Socket 触发主 App 弹窗。 |
+| **7** | Finder 集成 | **无限仓库 + 父目录自动发现 + 网盘兜底（7.1-A, 7.2-B）** | 支持不限数量的显式添加仓库、添加工作区父目录自动递归扫描、排除列表；V1 完整提供 **Finder 标签（Tags）状态着色**（网盘/本地独立开关）与 **Quick Actions（`.workflow`）安装管理**。 |
+| **8** | Diff / Merge | **外部工具生态 + 内置图片对比（8-A）** | 完整支持 20+ 主流外部 Diff 工具与 10+ 外部 Merge 工具自动探测与变量模板调用；支持 `Diff later` / `Diff with "..."`；图片文件内置 `ImageDiffWindowController`（并排/叠加/分屏/差值）。 |
+| **9** | 身份验证 | **每仓库认证管理 + Keychain + Askpass（9-B）** | 支持按仓库配置认证方式（无 / 用户名密码 / SSH 私钥+端口+口令）；macOS Keychain 存储；内置 `git-credential-reposhell` 与 `reposhell-askpass` 经本地 Unix Socket 触发主 App 弹窗。 |
 | **10** | V1 功能范围 | **全量基础 + 进阶 Git 功能（含中英双语）** | 包含全部日常操作窗口与进阶窗口（Rebase、Cherry-Pick、RefLog、Repo-browser、Compare Revisions、Blame、Submodules、Changelists、Hidden Files、Commit Notes）；不含 LFS、全局快捷键、操作快速搜索框、独立 CLI。 |
 | **11** | 命名、签名与 V2 | **`RepoShell` + Apple Development 签名 + V2 SVN 设计（10, 11-A）** | Bundle ID `com.leaf.reposhell`；macOS 要求 FinderSync 扩展必须签名方可加载，因此统一使用 `Apple Development`（Team `YM3PT5F5G4`）签名；单设第 10 章完整规划 V2 SVN。 |
 
@@ -192,7 +191,7 @@ YM3PT5F5G4.com.leaf.reposhell/
 | `normal` | 正常/无改动 | Clean tracked | Normal | **15（最低）** |
 
 **文件夹聚合规则**：对于同一文件夹下所有直接/间接子孙路径的 `VcsFileStatus`，按上述优先级取**数值最小（最高严重度）**的状态作为文件夹状态。对于 `ignored` / `untracked` 是否向上传播给父文件夹：
-- `untracked` 默认仅标注自身，**仅当没有更高优先级改动且用户未关闭时可按需传播，但参考 SnailGit 标准行为：`modified`、`added`、`deleted`、`renamed`、`unmerged`、`missing`、`replaced`、`obstructed` 向上传播到所有父文件夹，而 `ignored` 绝不污染父目录状态，`untracked` 在文件夹包含未跟踪文件时显示 `untracked`（若已有其他改动则被改动优先级覆盖）**。
+- `untracked` 默认仅标注自身，**仅当没有更高优先级改动且用户未关闭时可按需传播，遵循标准目录状态传播规则：`modified`、`added`、`deleted`、`renamed`、`unmerged`、`missing`、`replaced`、`obstructed` 向上传播到所有父文件夹，而 `ignored` 绝不污染父目录状态，`untracked` 在文件夹包含未跟踪文件时显示 `untracked`（若已有其他改动则被改动优先级覆盖）**。
 
 ### 4.2 `VcsProvider` 协议族
 在 `RepoShellVcs` 中定义统一异步接口：
@@ -355,8 +354,8 @@ sequenceDiagram
 
 ### 8.1 外部 Diff / Merge 工具生态（决策 8-A）
 `DiffToolManager` 完整预置并自动探测本机 `/Applications`、`/usr/local/bin`、`/opt/homebrew/bin` 中的工具：
-- **Diff 工具预设（23 款，对齐 SnailGit `DiffTools.plist`）**：Visual Studio Code、Visual Studio Code Insiders、Beyond Compare、Kaleidoscope、FileMerge (`opendiff`)、DiffMerge、DiffMerge by Bing Qian、Araxis Merge、BBEdit、Changes、CompareMerge、CompareMerge2、DeltaWalker、diffease、ECMerge、Emacs (`ediff`)、KDiff3、MacVim、Meld、P4Merge、TextWrangler、VisualDiffer、Cursor（扩展兼容）+ **自定义命令行模板**（支持 `$LOCAL`、`$REMOTE` 占位符）。
-- **Merge 工具预设（10 款，对齐 SnailSVN `MergeTools.plist`）**：Beyond Compare、Kaleidoscope、FileMerge、DiffMerge、Araxis Merge、DeltaWalker、ECMerge、KDiff3、Meld、P4Merge + **自定义命令行模板**（支持 `$BASE`、`$LOCAL`、`$REMOTE`、`$MERGED` 占位符）。
+- **Diff 工具预设（23 款）**：Visual Studio Code、Visual Studio Code Insiders、Beyond Compare、Kaleidoscope、FileMerge (`opendiff`)、DiffMerge、DiffMerge by Bing Qian、Araxis Merge、BBEdit、Changes、CompareMerge、CompareMerge2、DeltaWalker、diffease、ECMerge、Emacs (`ediff`)、KDiff3、MacVim、Meld、P4Merge、TextWrangler、VisualDiffer、Cursor（扩展兼容）+ **自定义命令行模板**（支持 `$LOCAL`、`$REMOTE` 占位符）。
+- **Merge 工具预设（10 款）**：Beyond Compare、Kaleidoscope、FileMerge、DiffMerge、Araxis Merge、DeltaWalker、ECMerge、KDiff3、Meld、P4Merge + **自定义命令行模板**（支持 `$BASE`、`$LOCAL`、`$REMOTE`、`$MERGED` 占位符）。
 - **“自动（Auto）”策略**：按预设优先级选取第一个在本机探测到已安装的 Diff/Merge 工具；若用户未安装任何第三方工具且本机存在 Xcode FileMerge (`opendiff`) 则自动选用；否则提示用户安装或配置自定义工具。
 - **Diff later 机制**：在 Finder 中对文件 A 点击「稍后对比」时，记录 A 的绝对路径到 `diff-later.json`；之后选中文件 B 时菜单动态变为「与“A”对比」，点击后直接提取两文件调起 Diff 工具（图片则进内置图片对比窗）。
 
@@ -425,9 +424,9 @@ sequenceDiagram
 
 ---
 
-## 第 10 章：V2 SVN 架构与完整复刻设计（SnailSVN 1.10 对等实现）
+## 第 10 章：V2 SVN 架构与完整设计
 
-为全面支持集中式版本控制 Subversion (SVN) 并复刻 **SnailSVN 1.10** 的完整工作流，V2 在保留 V1 Git 抽象骨架与零迁移破坏前提下，按已确认的设计决策 **1A–8A** 落地以下端到端架构。
+为全面支持集中式版本控制 Subversion (SVN) 的完整工作流，V2 在保留 V1 Git 抽象骨架与零迁移破坏前提下，按已确认的设计决策 **1A–8A** 落地以下端到端架构。
 
 ### 10.1 Git vs SVN 核心能力与状态对照
 
@@ -447,7 +446,7 @@ sequenceDiagram
 1. **SVN 可执行文件定位（1A）**：
    - `SvnExecutableResolver` 自动探测系统常见路径（`/opt/homebrew/bin/svn`、`/usr/local/bin/svn`、`/usr/bin/svn`，以及同级 `svnadmin`）。
    - `AppPreferences` 提供自定义 `externalSvnPath`、`svnDylibPath`（注入 `DYLD_LIBRARY_PATH`）与预留内置槽位 `Contents/Resources/subversion/`（`useBundledSvn` 默认 `false`、`externalSvnPath` 默认空字符串）。
-2. **SnailSVN 1.10 全量功能矩阵（2A）**：
+2. **SVN 全量功能矩阵（2A）**：
    - **基础操作**：`Update`、`Update to Revision`、`Commit`（自动 Add 未跟踪 / 自动 Delete 丢失项 / Changelists / Keep locks / 历史提交信息）、`Show Log`（分页 + 过滤 + 还原指定版本/范围变更 + 在线修改 `svn:log` 属性）、`Check for Modifications`（本地状态 + 一键 `svn status -u` 检查远端变更与服务器锁）、`Checkout`、`Create Repository` (`svnadmin create`)、`Export`、`Diff / Diff with Previous Version / Diff Later`（集成 `ImageDiffWindowView` 与外部 Diff 工具）、`Resolve Conflicts`（Base / Mine Full / Theirs Full / Mine Conflict / Theirs Conflict / Working + 外部 Merge 工具）、`Revert`、`Add`、`Delete` / `Delete (Keep Local)`、`Rename`、`Move` (`svn move --parents`)、`Add to Ignore List` (`svn:ignore` + Global ignores)、`Clean up`、`SVN Info`、`Upgrade Working Copy`。
    - **进阶操作**：`Repo-browser`（远端 `mkdir` / `copy` / `move` / `delete` / `checkout` / `export` / 查看属性 / 在线编辑或提取文件）、`Branch / Tag` (`svn copy` + 可选 copy 后 switch)、`Switch`、`Merge`（Range of revisions / Two different trees + `--dry-run` 测试合并 + Reintegrate / Record-only / Depth / Ignore ancestry / Whitespace）、`Get Lock` / `Release Lock`（含 Steal / Break Lock）、`Properties`（表格浏览 + 新增/编辑/删除 + `svn:ignore`/`svn:externals`/`svn:needs-lock`/`svn:eol-style`/`svn:executable`/`svn:mime-type`/`svn:keywords` 预设 + 递归 `-R`）、`Relocate`、`Import`、`Blame`、`Compare Revisions`、`Create Patch` / `Apply Patch`。
 3. **Finder 右键一级菜单置顶（3A）**：
@@ -479,7 +478,7 @@ sequenceDiagram
 | `MainWindowView` / `SvnTabView` / `GeneralTabView` | Shared + SVN | 5 Tab 结构；`GeneralTabView` 分区配置 Git/SVN 一级置顶菜单；`RepositoriesTabView` 支持添加/新建/签出/导入 SVN 仓库及专门的右键操作。 |
 | `BlameResultWindowView` | Shared | 复用内置代码追溯结果视图，按 `vcsType` 区分版本号展示（`r1234` vs 短哈希）与跳转日志行为。 |
 | `ImageDiffWindowView` | Shared | 100% 复用 4 模式图片对比视图。 |
-| `SvnCommitWindowView` / `SvnModificationsWindowView` / `SvnLogWindowView` | SVN | 位于 `Targets/RepoShellApp/Windows/Svn/SvnCoreWindows.swift`，分别对应 SnailSVN Commit（自动 Add/Delete、Changelist、Keep locks）、Check for Modifications（含远端 `-u` 检查）与 Show Log（分页、过滤、Revert revision changes、Edit `svn:log`）。 |
+| `SvnCommitWindowView` / `SvnModificationsWindowView` / `SvnLogWindowView` | SVN | 位于 `Targets/RepoShellApp/Windows/Svn/SvnCoreWindows.swift`，分别对应 SVN Commit（自动 Add/Delete、Changelist、Keep locks）、Check for Modifications（含远端 `-u` 检查）与 Show Log（分页、过滤、Revert revision changes、Edit `svn:log`）。 |
 | `SvnCheckoutWindowView` / `SvnCreateRepoWindowView` / `SvnUpdateToRevisionWindowView` / `SvnExportWindowView` / `SvnCleanupWindowView` / `SvnResolveConflictsWindowView` / `SvnRevertWindowView` / `SvnMoveRenameWindowView` / `SvnAddToIgnoreWindowView` / `SvnInfoWindowView` | SVN | 位于 `Targets/RepoShellApp/Windows/Svn/SvnWorkingCopyDialogs.swift`。 |
 | `SvnRepoBrowserWindowView` / `SvnBranchTagWindowView` / `SvnSwitchWindowView` / `SvnMergeWindowView` / `SvnLockUnlockWindowView` / `SvnPropertiesWindowView` / `SvnRelocateWindowView` / `SvnImportWindowView` / `SvnBlameDialogView` / `SvnCompareRevisionsWindowView` / `SvnPatchWindowView` | SVN | 位于 `Targets/RepoShellApp/Windows/Svn/SvnAdvancedWindows.swift`。 |
 

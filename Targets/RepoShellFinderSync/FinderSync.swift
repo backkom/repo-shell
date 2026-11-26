@@ -10,11 +10,13 @@ final class FinderSync: FIFinderSync {
     private var config = SharedConfig()
     private var snapshotsByRepo: [String: RepoStatusSnapshot] = [:]
     private var diffLaterState: DiffLaterState?
+    private var updateState: AppUpdateState?
     private var menuActionsByTag: [Int: MenuActionBox] = [:]
 
     private var configObserver: NSObjectProtocol?
     private var statusObserver: NSObjectProtocol?
     private var diffLaterObserver: NSObjectProtocol?
+    private var updateObserver: NSObjectProtocol?
 
     override init() {
         super.init()
@@ -54,6 +56,18 @@ final class FinderSync: FIFinderSync {
                 self.diffLaterState = diffLater
             }
         }
+
+        updateObserver = dnc.addObserver(
+            forName: AppConstants.DistributedNotification.updateStateDidUpdate.cfName,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let loadedUpdate = self.storage.loadUpdateState()
+            self.stateLock.withLock {
+                self.updateState = loadedUpdate
+            }
+        }
     }
 
     deinit {
@@ -61,6 +75,7 @@ final class FinderSync: FIFinderSync {
         if let o = configObserver { dnc.removeObserver(o) }
         if let o = statusObserver { dnc.removeObserver(o) }
         if let o = diffLaterObserver { dnc.removeObserver(o) }
+        if let o = updateObserver { dnc.removeObserver(o) }
     }
 
     // MARK: - FIFinderSync Overrides
@@ -118,14 +133,17 @@ final class FinderSync: FIFinderSync {
         let lookupPath = selectedPaths.first ?? targetDirPath
 
         let latestCfg = storage.loadConfig()
-        let (cfg, matchedRepo, snapshot, diffLater) = stateLock.withLock {
+        let latestUpdate = storage.loadUpdateState()
+        let (cfg, matchedRepo, snapshot, diffLater, availableUpdateVersion) = stateLock.withLock {
             self.config = latestCfg
+            self.updateState = latestUpdate
             let repo = latestCfg.matchingRepository(for: lookupPath) ?? latestCfg.matchingRepository(for: targetDirPath)
             let snap = repo.flatMap { snapshotsByRepo[$0.path] ?? storage.loadStatusSnapshot(for: $0.path) }
             if let repo = repo, let snap = snap, snapshotsByRepo[repo.path] == nil {
                 snapshotsByRepo[repo.path] = snap
             }
-            return (latestCfg, repo, snap, diffLaterState)
+            let availVer: String? = (latestUpdate?.isNewer(than: AppConstants.currentVersion) == true) ? latestUpdate?.latestVersion : nil
+            return (latestCfg, repo, snap, diffLaterState, availVer)
         }
 
         var containsGit = false
@@ -149,7 +167,8 @@ final class FinderSync: FIFinderSync {
             directoryContainsGitFolder: containsGit,
             directoryContainsSvnFolder: containsSvn,
             isDirectoryCleanRepoCandidate: !containsGit && !containsSvn,
-            language: cfg.preferences.language
+            language: cfg.preferences.language,
+            availableUpdateVersion: availableUpdateVersion
         )
 
         let isToolbar = (menuKind == .toolbarItemMenu)
@@ -172,6 +191,7 @@ final class FinderSync: FIFinderSync {
             cascade: shouldCascade,
             topLevelActions: topActions,
             showIcons: cfg.preferences.showMenuIcons,
+            showUpdateDot: availableUpdateVersion != nil,
             targetDirectoryPath: targetDirPath,
             selectedPaths: selectedPaths,
             repoPath: matchedRepo?.path,
@@ -228,11 +248,13 @@ final class FinderSync: FIFinderSync {
             }
         }
         let diffLater = storage.loadDiffLater()
+        let loadedUpdate = storage.loadUpdateState()
 
         stateLock.withLock {
             self.config = cfg
             self.snapshotsByRepo = loadedSnaps
             self.diffLaterState = diffLater
+            self.updateState = loadedUpdate
         }
 
         // Observe "/" without overlapping child entries so Finder invokes menu(for:) everywhere

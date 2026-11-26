@@ -10,9 +10,12 @@ struct SvnCommitWindowView: View {
     let repoPath: String
     let preselectedPaths: [String]
 
+    @State private var repoURL: String = ""
+    @State private var wcRevision: String = ""
     @State private var branchLabel: String = ""
     @State private var items: [SvnDetailedStatusItem] = []
     @State private var selectedPaths: Set<String> = []
+    @State private var highlightedPaths: Set<String> = []
     @State private var changelists: [Changelist] = []
     @State private var activeChangelist: String = "__all__"
     @State private var pathFilter: String = ""
@@ -26,187 +29,243 @@ struct SvnCommitWindowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 10) {
+            // Header Bar
+            HStack(spacing: 8) {
                 Text(L("Commit to:", "提交到："))
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
-                Label(branchLabel.isEmpty ? "SVN" : branchLabel, systemImage: "server.rack")
-                    .font(.headline)
+
+                Text(repoURL.isEmpty ? (branchLabel.isEmpty ? repoPath : branchLabel) : repoURL)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+
+                if !wcRevision.isEmpty {
+                    Text("r\(wcRevision)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.12))
+                        .cornerRadius(4)
+                }
+
                 Spacer()
-                Button(L("Manage Changelists…", "管理变更列表…")) {
+
+                Button(L("Manage Changelists…", "变更列表…")) {
                     AppContainer.shared.windowCoordinator.openChangelists(repoPath: repoPath)
                 }
-                Button(L("Hidden Files…", "隐藏文件…")) {
+                .controlSize(.small)
+
+                Button(L("Hidden Files…", "隐藏规则…")) {
                     AppContainer.shared.windowCoordinator.openHiddenFiles(repoPath: repoPath)
                 }
+                .controlSize(.small)
+
                 Button {
                     refresh()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    if isLoading {
+                        ProgressView().controlSize(.small)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
+                .controlSize(.small)
                 .help(L("Refresh status", "刷新状态"))
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
+            .background(Color(nsColor: .windowBackgroundColor))
 
             Divider()
 
-            // Message box + options
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(L("Commit Message:", "提交信息："))
-                        .font(.subheadline.weight(.medium))
-                    Spacer()
-                    Picker(L("Recent Messages", "最近提交信息"), selection: Binding(
-                        get: { "" },
-                        set: { if !$0.isEmpty { message = $0 } }
-                    )) {
-                        Text(L("Recent Messages…", "最近提交信息…")).tag("")
-                        ForEach(recentMessages, id: \.self) { msg in
-                            Text(msg.replacingOccurrences(of: "\n", with: " ")).lineLimit(1).tag(msg)
-                        }
-                    }
-                    .frame(maxWidth: 260)
-                }
-
-                TextEditor(text: $message)
-                    .font(.system(.body, design: .default))
-                    .frame(height: 88)
-                    .border(Color.secondary.opacity(0.25))
-
-                HStack(spacing: 16) {
-                    Toggle(L("Keep locks (--no-unlock)", "保留文件锁 (--no-unlock)"), isOn: $keepLocks)
-                    Toggle(L("Keep changelists", "保留变更列表 (--keep-changelists)"), isOn: $keepChangelists)
-                    Spacer()
-                }
-                .font(.caption)
-            }
-            .padding(12)
-
-            Divider()
-
-            // Filter bar
-            HStack(spacing: 10) {
-                Toggle(L("Select / Deselect All", "全选 / 取消全选"), isOn: Binding(
-                    get: {
-                        let visible = visibleItems
-                        return !visible.isEmpty && visible.allSatisfy { selectedPaths.contains($0.item.relativePath) }
-                    },
-                    set: { checked in
-                        let visible = Set(visibleItems.map(\.item.relativePath))
-                        if checked {
-                            selectedPaths.formUnion(visible)
-                        } else {
-                            selectedPaths.subtract(visible)
-                        }
-                    }
-                ))
-
-                Toggle(L("Show unversioned", "显示未版本控制"), isOn: $showUntracked)
-
-                Picker(L("Changelist:", "变更列表："), selection: $activeChangelist) {
-                    Text(L("All Changes", "全部更改")).tag("__all__")
-                    ForEach(availableChangelistNames, id: \.self) { name in
-                        Text(name).tag(name)
-                    }
-                }
-                .frame(maxWidth: 220)
-
-                Spacer()
-
-                TextField(L("Filter paths…", "过滤路径…"), text: $pathFilter)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            if isLoading && items.isEmpty {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if visibleItems.isEmpty {
-                EmptyStateBox(
-                    systemImage: "checkmark.circle",
-                    title: L("No Local Modifications", "工作副本没有本地更改"),
-                    subtitle: L("Everything selected is clean or hidden by filters.", "当前筛选条件下没有需要提交的更改。")
-                )
-            } else {
-                List(visibleItems) { entry in
-                    HStack(spacing: 8) {
-                        Toggle("", isOn: Binding(
-                            get: { selectedPaths.contains(entry.item.relativePath) },
-                            set: { on in
-                                if on { selectedPaths.insert(entry.item.relativePath) }
-                                else { selectedPaths.remove(entry.item.relativePath) }
+            // Main Vertical Split: Message (top) + Changes Table (bottom)
+            VSplitView {
+                // Message Pane
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(L("Message:", "提交信息："))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Menu(L("Recent Messages", "最近提交信息")) {
+                            if recentMessages.isEmpty {
+                                Text(L("None", "无"))
+                            } else {
+                                ForEach(recentMessages, id: \.self) { msg in
+                                    Button(msg.replacingOccurrences(of: "\n", with: " ").prefix(72) + (msg.count > 72 ? "…" : "")) {
+                                        message = msg
+                                    }
+                                }
                             }
-                        ))
-                        .labelsHidden()
+                        }
+                        .menuStyle(.borderedButton)
+                        .controlSize(.small)
+                        .fixedSize()
+                    }
 
-                        StatusBadgeLabel(status: entry.item.status)
-                            .frame(width: 90, alignment: .leading)
+                    ZStack(alignment: .topLeading) {
+                        if message.isEmpty {
+                            Text(L("Enter commit message… (⌘↩ to commit)", "输入提交说明…（⌘↩ 提交）"))
+                                .font(.system(size: 13))
+                                .foregroundColor(Color(nsColor: .placeholderTextColor))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 7)
+                                .allowsHitTesting(false)
+                        }
+                        TextEditor(text: $message)
+                            .font(.system(size: 13))
+                            .scrollContentBackground(.hidden)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 4)
+                    }
+                    .frame(minHeight: 74, maxHeight: .infinity)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .cornerRadius(5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                    )
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(minHeight: 112, idealHeight: 136)
 
-                        Text(entry.item.relativePath)
-                            .font(.system(.body, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                // Changes Made Pane
+                VStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(L("Changes made (double-click on file for diff):", "变更列表（双击文件进行对比，空格切换勾选）："))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
 
                         Spacer()
 
-                        if let rev = entry.revision, !rev.isEmpty {
-                            Text("r\(rev)")
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.secondary)
-                        }
-                        if let lock = entry.localLock {
-                            Label(lock.owner, systemImage: "lock.fill")
-                                .font(.caption2)
-                                .foregroundColor(.orange)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        AppContainer.shared.windowCoordinator.openDiffWithRevision(
-                            repoPath: repoPath,
-                            filePath: entry.item.absolutePath,
-                            revision: "BASE",
-                            rightTitle: L("Working Copy", "工作副本")
-                        )
-                    }
-                    .contextMenu {
-                        Button(L("Diff", "对比")) {
-                            AppContainer.shared.windowCoordinator.openDiffWithRevision(
-                                repoPath: repoPath,
-                                filePath: entry.item.absolutePath,
-                                revision: "BASE",
-                                rightTitle: L("Working Copy", "工作副本")
-                            )
-                        }
-                        if entry.item.status != .untracked {
-                            Button(L("Revert…", "复原…")) {
-                                performRevert(paths: [entry.item.absolutePath])
+                        Picker("", selection: $activeChangelist) {
+                            Text(L("All Changes", "全部更改")).tag("__all__")
+                            ForEach(availableChangelistNames, id: \.self) { name in
+                                Text(name).tag(name)
                             }
                         }
-                        Button(L("Add to Ignore List…", "添加到忽略清单…")) {
-                            AppContainer.shared.windowCoordinator.dispatch(
-                                action: .addToIgnore,
-                                repoPath: repoPath,
-                                targetDir: repoPath,
-                                selectedPaths: [entry.item.absolutePath]
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextField(L("Filter paths…", "过滤路径…"), text: $pathFilter)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12))
+                            if !pathFilter.isEmpty {
+                                Button {
+                                    pathFilter = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .frame(width: 190)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .cornerRadius(5)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                        )
+                    }
+
+                    // Native AppKit File Table
+                    Group {
+                        if isLoading && items.isEmpty {
+                            ProgressView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .border(Color(nsColor: .separatorColor), width: 1)
+                        } else if visibleItems.isEmpty {
+                            EmptyStateBox(
+                                systemImage: "checkmark.circle",
+                                title: L("No Local Modifications", "工作副本没有本地更改"),
+                                subtitle: L("Everything selected is clean or hidden by filters.", "当前筛选条件下没有需要提交的更改。")
+                            )
+                            .background(Color(nsColor: .controlBackgroundColor))
+                            .border(Color(nsColor: .separatorColor), width: 1)
+                        } else {
+                            CommitFilesTableView(
+                                rows: commitRows,
+                                checkedPaths: $selectedPaths,
+                                highlightedPaths: $highlightedPaths,
+                                detailColumnTitle: L("Revision", "版本"),
+                                vcsType: .svn,
+                                changelists: changelists,
+                                onDoubleClick: { row in
+                                    openDiffOrFile(for: row)
+                                },
+                                onContextAction: handleContextAction
                             )
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Table Footer Strip
+                    let visible = visibleItems
+                    let checkedVisibleCount = visible.filter { selectedPaths.contains($0.item.relativePath) }.count
+                    HStack(spacing: 14) {
+                        Toggle(L("Select / deselect all", "全选 / 取消全选"), isOn: Binding(
+                            get: {
+                                !visible.isEmpty && visible.allSatisfy { selectedPaths.contains($0.item.relativePath) }
+                            },
+                            set: { checked in
+                                let visibleSet = Set(visible.map(\.item.relativePath))
+                                if checked {
+                                    selectedPaths.formUnion(visibleSet)
+                                } else {
+                                    selectedPaths.subtract(visibleSet)
+                                }
+                            }
+                        ))
+
+                        Toggle(L("Show unversioned files", "显示未版本控制文件"), isOn: $showUntracked)
+
+                        Spacer()
+
+                        if highlightedPaths.count > 1 {
+                            Text(String(format: L("%d highlighted", "已选中 %d 行"), highlightedPaths.count))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Text(String(format: L("%d selected, %d files total", "已勾选 %d 项，共 %d 个文件"), checkedVisibleCount, visible.count))
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                    .controlSize(.small)
                 }
+                .padding(.horizontal, 14)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .frame(minHeight: 220)
             }
 
             Divider()
 
-            // Footer
-            HStack {
-                Text(String(format: L("%d selected of %d files", "已选 %d / %d 项"), selectedPaths.count, visibleItems.count))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            // Bottom Action Bar
+            let visibleCheckedCount = visibleItems.filter { selectedPaths.contains($0.item.relativePath) }.count
+            HStack(spacing: 16) {
+                Toggle(L("Keep locks", "保留文件锁"), isOn: $keepLocks)
+                    .help(L("Do not unlock committed locked files (--no-unlock)", "提交后保留文件锁 (--no-unlock)"))
+                Toggle(L("Keep changelists", "保留变更列表"), isOn: $keepChangelists)
+                    .help(L("Keep changelist associations after commit (--keep-changelists)", "提交后保留变更列表关联 (--keep-changelists)"))
+
                 Spacer()
+
                 Button(L("Cancel", "取消")) {
                     AppContainer.shared.windowCoordinator.closeWindow(key: "svn-commit-\(repoPath)")
                 }
@@ -217,9 +276,13 @@ struct SvnCommitWindowView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(selectedPaths.isEmpty)
+                .frame(minWidth: 80)
+                .disabled(visibleCheckedCount == 0)
             }
-            .padding(12)
+            .controlSize(.regular)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
         .onAppear(perform: refresh)
     }
@@ -259,6 +322,86 @@ struct SvnCommitWindowView: View {
         }
     }
 
+    private var commitRows: [CommitFileRow] {
+        visibleItems.map { entry in
+            let revStr = entry.revision.flatMap { $0.isEmpty ? nil : "r\($0)" } ?? ""
+            let lockSuffix = entry.localLock != nil ? " 🔒" : ""
+            return CommitFileRow(
+                relativePath: entry.item.relativePath,
+                absolutePath: entry.item.absolutePath,
+                extensionText: entry.item.isDirectory ? "" : URL(fileURLWithPath: entry.item.relativePath).pathExtension,
+                status: entry.item.status,
+                statusDisplayText: AppContainer.shared.localized(entry.item.status.localizedLabelKey),
+                isDirectory: entry.item.isDirectory,
+                detailText: revStr + lockSuffix,
+                tooltipText: entry.item.relativePath
+            )
+        }
+    }
+
+    private func openDiffOrFile(for row: CommitFileRow) {
+        if row.status == .untracked {
+            NSWorkspace.shared.open(URL(fileURLWithPath: row.absolutePath))
+        } else {
+            AppContainer.shared.windowCoordinator.openDiffWithRevision(
+                repoPath: repoPath,
+                filePath: row.absolutePath,
+                revision: "BASE",
+                rightTitle: L("Working Copy", "工作副本")
+            )
+        }
+    }
+
+    private func handleContextAction(_ action: CommitFileContextAction) {
+        switch action {
+        case .diff(let row):
+            openDiffOrFile(for: row)
+        case .diffPrevious(let row):
+            AppContainer.shared.windowCoordinator.openDiffPreviousVersion(repoPath: repoPath, filePath: row.absolutePath)
+        case .showLog(let row):
+            AppContainer.shared.windowCoordinator.dispatch(action: .showLog, repoPath: repoPath, targetDir: repoPath, selectedPaths: [row.absolutePath])
+        case .blame(let row):
+            AppContainer.shared.windowCoordinator.dispatch(action: .blame, repoPath: repoPath, targetDir: repoPath, selectedPaths: [row.absolutePath])
+        case .add(let rows):
+            let targets = rows.map(\.absolutePath)
+            Task {
+                _ = try? await AppContainer.shared.svnProvider.add(repoPath: repoPath, paths: targets)
+                refresh()
+            }
+        case .revert(let rows):
+            let targets = rows.map(\.absolutePath)
+            guard !targets.isEmpty, AlertHelper.confirm(
+                title: L("SVN Revert", "SVN 复原"),
+                message: rows.count == 1 ? rows[0].relativePath : String(format: L("Revert %d selected items?", "确定要复原所选 %d 项吗？"), rows.count)
+            ) else { return }
+            performRevert(paths: targets)
+        case .delete(let rows):
+            let targets = rows.map(\.absolutePath)
+            guard !targets.isEmpty, AlertHelper.confirm(
+                title: L("SVN Delete", "SVN 删除"),
+                message: rows.count == 1 ? rows[0].relativePath : String(format: L("Delete %d selected items?", "确定从 SVN 与本地删除所选 %d 项吗？"), rows.count)
+            ) else { return }
+            Task {
+                _ = try? await AppContainer.shared.svnProvider.remove(repoPath: repoPath, paths: targets, keepLocal: false)
+                refresh()
+            }
+        case .addToIgnore(let rows):
+            AppContainer.shared.windowCoordinator.dispatch(action: .addToIgnore, repoPath: repoPath, targetDir: repoPath, selectedPaths: rows.map(\.absolutePath))
+        case .hideFiles(let rows):
+            _ = try? AppContainer.shared.hiddenFilesStore.addRules(rows.map(\.relativePath), for: repoPath)
+            hiddenPatterns = AppContainer.shared.hiddenFilesStore.loadRules(for: repoPath)
+        case .moveToChangelist(let rows, let clID):
+            changelists = (try? AppContainer.shared.changelistStore.moveFiles(rows.map(\.relativePath), toChangelistID: clID, for: repoPath)) ?? changelists
+        case .openFile(let row):
+            NSWorkspace.shared.open(URL(fileURLWithPath: row.absolutePath))
+        case .revealInFinder(let rows):
+            NSWorkspace.shared.activateFileViewerSelecting(rows.map { URL(fileURLWithPath: $0.absolutePath) })
+        case .copyPaths(let rows):
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(rows.map(\.relativePath).joined(separator: "\n"), forType: .string)
+        }
+    }
+
     private func refresh() {
         isLoading = true
         changelists = AppContainer.shared.changelistStore.load(for: repoPath)
@@ -271,6 +414,8 @@ struct SvnCommitWindowView: View {
             defer { isLoading = false }
             do {
                 let info = try await AppContainer.shared.svnProvider.info(target: repoPath, workingDirectory: repoPath)
+                repoURL = info.url
+                wcRevision = info.revision
                 branchLabel = info.formattedBranchName
                 let detailed = try await AppContainer.shared.svnProvider.detailedStatus(
                     repoPath: repoPath,
@@ -284,16 +429,18 @@ struct SvnCommitWindowView: View {
                 }
                 self.items = committable
 
-                if !preselectedPaths.isEmpty {
-                    let preSet = Set(preselectedPaths.map { PathUtils.normalize($0) })
+                let normRepo = PathUtils.normalize(repoPath)
+                let preSet = Set(preselectedPaths.map { PathUtils.normalize($0) })
+                if preSet.isEmpty || preSet.contains(normRepo) {
+                    self.selectedPaths = Set(committable.filter { $0.item.status != .untracked }.map(\.item.relativePath))
+                } else {
                     let matched = committable.filter { entry in
-                        preSet.contains { sel in
+                        preSet.contains(entry.item.absolutePath)
+                        || (entry.item.status != .untracked && preSet.contains { sel in
                             PathUtils.isPath(entry.item.absolutePath, insideOrEqualTo: sel)
-                        }
+                        })
                     }
                     self.selectedPaths = Set(matched.map(\.item.relativePath))
-                } else {
-                    self.selectedPaths = Set(committable.filter { $0.item.status != .untracked }.map(\.item.relativePath))
                 }
             } catch {
                 AlertHelper.showError(error)
@@ -327,7 +474,7 @@ struct SvnCommitWindowView: View {
             return
         }
 
-        let selectedEntries = items.filter { selectedPaths.contains($0.item.relativePath) }
+        let selectedEntries = visibleItems.filter { selectedPaths.contains($0.item.relativePath) }
         guard !selectedEntries.isEmpty else { return }
 
         if selectedEntries.contains(where: { $0.item.status == .unmerged }) {

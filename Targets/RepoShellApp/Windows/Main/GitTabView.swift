@@ -3,6 +3,7 @@ import RepoShellShared
 
 enum GitPrefSubtab: String, CaseIterable {
     case user
+    case contextMenu
     case gitconfig
     case globalIgnore
     case history
@@ -18,16 +19,19 @@ struct GitTabView: View {
     @State private var historyData = RecentHistoryData()
     @State private var statusMessage: String = ""
 
+    private var sidebarItems: [VcsSidebarNavItem<GitPrefSubtab>] {
+        [
+            VcsSidebarNavItem(id: .user, title: L("User", "用户"), systemImage: "person.crop.circle"),
+            VcsSidebarNavItem(id: .contextMenu, title: L("Context Menu", "右键菜单"), systemImage: "list.bullet.rectangle"),
+            VcsSidebarNavItem(id: .gitconfig, title: ".gitconfig", systemImage: "doc.text"),
+            VcsSidebarNavItem(id: .globalIgnore, title: L("Global .gitignore", "全局 .gitignore"), systemImage: "eye.slash"),
+            VcsSidebarNavItem(id: .history, title: L("History", "最近历史"), systemImage: "clock.arrow.circlepath"),
+        ]
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $subtab) {
-                Text(L("User", "用户")).tag(GitPrefSubtab.user)
-                Text(".gitconfig").tag(GitPrefSubtab.gitconfig)
-                Text(L("Global .gitignore", "全局 .gitignore")).tag(GitPrefSubtab.globalIgnore)
-                Text(L("History", "最近历史")).tag(GitPrefSubtab.history)
-            }
-            .pickerStyle(.segmented)
-            .padding()
+        HStack(spacing: 0) {
+            VcsPrefSidebar(items: sidebarItems, selection: $subtab)
 
             Divider()
 
@@ -35,6 +39,8 @@ struct GitTabView: View {
                 switch subtab {
                 case .user:
                     userView
+                case .contextMenu:
+                    contextMenuView
                 case .gitconfig:
                     gitconfigView
                 case .globalIgnore:
@@ -46,6 +52,19 @@ struct GitTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear(perform: loadAll)
+    }
+
+    private var contextMenuView: some View {
+        TopLevelContextMenuView(
+            sectionTitle: L("Git top-level context menu actions", "Git 右键一级菜单常用操作"),
+            descriptionText: L(
+                "Selected actions appear directly in Finder's top-level context menu; remaining actions stay in the RepoShell submenu.",
+                "勾选的操作将直接显示在访达右键一级菜单中，其余操作收纳在 RepoShell 子菜单内。"
+            ),
+            promotableActions: AppPreferences.promotableMenuActions,
+            defaultActions: AppPreferences.defaultTopLevelMenuActions,
+            actionsKeyPath: \.topLevelMenuActions
+        )
     }
 
     private var userView: some View {

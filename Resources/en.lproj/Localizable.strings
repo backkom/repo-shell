@@ -1,4 +1,6 @@
 "menu.showApp" = "Show RepoShell";
+"menu.upgradeApp" = "Update RepoShell…";
+"menu.upgradeAppVersion" = "Update to v%@…";
 "menu.addRepository" = "Add Repository…";
 "menu.excludeRepository" = "Exclude Repository…";
 "menu.refresh" = "Refresh";

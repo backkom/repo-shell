@@ -5,6 +5,7 @@ import RepoShellServices
 
 enum SvnPrefSubtab: String, CaseIterable {
     case settings
+    case contextMenu
     case globalIgnores
     case configFile
     case history
@@ -20,16 +21,19 @@ struct SvnTabView: View {
     @State private var historyData = RecentHistoryData()
     @State private var statusMessage: String = ""
 
+    private var sidebarItems: [VcsSidebarNavItem<SvnPrefSubtab>] {
+        [
+            VcsSidebarNavItem(id: .settings, title: L("Settings", "常规设置"), systemImage: "gearshape"),
+            VcsSidebarNavItem(id: .contextMenu, title: L("Context Menu", "右键菜单"), systemImage: "list.bullet.rectangle"),
+            VcsSidebarNavItem(id: .globalIgnores, title: L("Global Ignores", "全局忽略"), systemImage: "eye.slash"),
+            VcsSidebarNavItem(id: .configFile, title: "~/.subversion/config", systemImage: "doc.text"),
+            VcsSidebarNavItem(id: .history, title: L("History", "最近历史"), systemImage: "clock.arrow.circlepath"),
+        ]
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $subtab) {
-                Text(L("Settings", "常规设置")).tag(SvnPrefSubtab.settings)
-                Text(L("Global Ignores", "全局忽略")).tag(SvnPrefSubtab.globalIgnores)
-                Text("~/.subversion/config").tag(SvnPrefSubtab.configFile)
-                Text(L("History", "最近历史")).tag(SvnPrefSubtab.history)
-            }
-            .pickerStyle(.segmented)
-            .padding()
+        HStack(spacing: 0) {
+            VcsPrefSidebar(items: sidebarItems, selection: $subtab)
 
             Divider()
 
@@ -37,6 +41,8 @@ struct SvnTabView: View {
                 switch subtab {
                 case .settings:
                     settingsView
+                case .contextMenu:
+                    contextMenuView
                 case .globalIgnores:
                     globalIgnoresView
                 case .configFile:
@@ -48,6 +54,19 @@ struct SvnTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear(perform: loadAll)
+    }
+
+    private var contextMenuView: some View {
+        TopLevelContextMenuView(
+            sectionTitle: L("SVN top-level context menu actions", "SVN 右键一级菜单常用操作"),
+            descriptionText: L(
+                "Selected SVN actions appear directly in Finder's top-level context menu for SVN working copies.",
+                "勾选的 SVN 操作将直接显示在访达右键一级菜单中，其余操作收纳在 RepoShell 子菜单内。"
+            ),
+            promotableActions: AppPreferences.promotableSvnMenuActions,
+            defaultActions: AppPreferences.defaultSvnTopLevelMenuActions,
+            actionsKeyPath: \.svnTopLevelMenuActions
+        )
     }
 
     private var settingsView: some View {

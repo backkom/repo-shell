@@ -47,6 +47,8 @@ public struct Localization: Sendable {
 
     private static let enStrings: [String: String] = [
         "menu.showApp": "Show RepoShell",
+        "menu.upgradeApp": "Update RepoShell…",
+        "menu.upgradeAppVersion": "Update to v%@…",
         "menu.addRepository": "Add Repository…",
         "menu.excludeRepository": "Exclude Repository…",
         "menu.refresh": "Refresh",
@@ -132,6 +134,8 @@ public struct Localization: Sendable {
 
     private static let zhHansStrings: [String: String] = [
         "menu.showApp": "显示 RepoShell",
+        "menu.upgradeApp": "升级 RepoShell…",
+        "menu.upgradeAppVersion": "发现新版本 v%@（点击升级）…",
         "menu.addRepository": "添加版本库…",
         "menu.excludeRepository": "排除版本库…",
         "menu.refresh": "刷新",

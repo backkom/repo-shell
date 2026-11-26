@@ -6,7 +6,9 @@ import RepoShellShared
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var statusRedDotView: NSView?
     private var configCancellable: AnyCancellable?
+    private var updateCancellable: AnyCancellable?
     private var actionObserver: NSObjectProtocol?
 
     static func main() {
@@ -27,10 +29,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] cfg in
                 self?.applyActivationPolicyAndMenuBar(showInMenuBar: cfg.preferences.showInMenuBar)
                 self?.rebuildStatusBarMenu()
+                self?.setupMainMenuBar()
+            }
+
+        updateCancellable = container.updateController.$availableUpdate
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateStatusItemBadge()
+                self?.rebuildStatusBarMenu()
+                self?.setupMainMenuBar()
             }
 
         setupMainMenuBar()
         LocalNetworkAuthorizationHelper.requestPermissionIfNeeded()
+        Task {
+            await FinderExtensionHelper.repairRegistrationIfNeeded()
+        }
 
         actionObserver = DistributedNotificationCenter.default().addObserver(
             forName: AppConstants.DistributedNotification.actionTriggered.cfName,
@@ -101,21 +115,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 img?.isTemplate = true
                 button.image = img
                 button.toolTip = AppConstants.appName
+
+                let dot = NSView()
+                dot.translatesAutoresizingMaskIntoConstraints = false
+                dot.wantsLayer = true
+                dot.layer?.backgroundColor = NSColor.systemRed.cgColor
+                dot.layer?.cornerRadius = 3
+                dot.isHidden = true
+                button.addSubview(dot)
+                NSLayoutConstraint.activate([
+                    dot.widthAnchor.constraint(equalToConstant: 6),
+                    dot.heightAnchor.constraint(equalToConstant: 6),
+                    dot.topAnchor.constraint(equalTo: button.topAnchor, constant: 3),
+                    dot.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -3)
+                ])
+                statusRedDotView = dot
             }
             statusItem = item
+            updateStatusItemBadge()
             rebuildStatusBarMenu()
         } else if !showInMenuBar, let existing = statusItem {
             NSStatusBar.system.removeStatusItem(existing)
             statusItem = nil
+            statusRedDotView = nil
+        }
+    }
+
+    private func updateStatusItemBadge() {
+        let update = AppContainer.shared.updateController.availableUpdate
+        statusRedDotView?.isHidden = (update == nil)
+        if let button = statusItem?.button {
+            if let update {
+                button.toolTip = "\(AppConstants.appName) — " + String(format: L("New version v%@ available", "发现新版本 v%@"), update.latestVersion)
+            } else {
+                button.toolTip = AppConstants.appName
+            }
         }
     }
 
     private func rebuildStatusBarMenu() {
         guard let item = statusItem else { return }
         let menu = NSMenu()
+        if let update = AppContainer.shared.updateController.availableUpdate {
+            let upgradeItem = NSMenuItem(
+                title: String(format: L("Update to v%@…", "发现新版本 v%@（点击升级）…"), update.latestVersion),
+                action: #selector(upgradeAppAction),
+                keyEquivalent: ""
+            )
+            upgradeItem.target = self
+            upgradeItem.image = MenuActionIconRenderer.redDotBadgeIcon(size: 14)
+            menu.addItem(upgradeItem)
+            menu.addItem(.separator())
+        }
         let showItem = NSMenuItem(title: L("Show RepoShell", "显示 RepoShell"), action: #selector(openMainAction), keyEquivalent: "")
         showItem.target = self
-        showItem.image = MenuActionIconRenderer.appBrandMenuIcon()
+        showItem.image = MenuActionIconRenderer.appBrandMenuIcon(showUpdateDot: AppContainer.shared.updateController.availableUpdate != nil)
         menu.addItem(showItem)
         menu.addItem(.separator())
 
@@ -169,6 +223,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(.separator())
+        let checkUpdateItem = NSMenuItem(title: L("Check for Updates…", "检查更新…"), action: #selector(checkForUpdatesAction), keyEquivalent: "")
+        checkUpdateItem.target = self
+        menu.addItem(checkUpdateItem)
         let quitItem = NSMenuItem(title: L("Quit RepoShell", "退出 RepoShell"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
         item.menu = menu
@@ -176,6 +233,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openMainAction() {
         AppContainer.shared.windowCoordinator.openMainWindow(selectedTab: .repositories)
+    }
+
+    @objc private func checkForUpdatesAction() {
+        Task {
+            await AppContainer.shared.updateController.checkForUpdates(userInitiated: true)
+        }
+    }
+
+    @objc private func upgradeAppAction() {
+        AppContainer.shared.updateController.startUpgrade()
+    }
+
+    @objc private func showAboutPanel() {
+        let credits = NSMutableAttributedString()
+        let bodyAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        credits.append(NSAttributedString(string: L("Developer: ", "开发者：") + "\(AppConstants.developerName) (", attributes: bodyAttrs))
+        if let mailURL = URL(string: "mailto:\(AppConstants.developerEmail)") {
+            credits.append(NSAttributedString(string: AppConstants.developerEmail, attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .link: mailURL
+            ]))
+        } else {
+            credits.append(NSAttributedString(string: AppConstants.developerEmail, attributes: bodyAttrs))
+        }
+        credits.append(NSAttributedString(string: ")\nGitHub: ", attributes: bodyAttrs))
+        credits.append(NSAttributedString(string: AppConstants.githubRepositoryURL.absoluteString, attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .link: AppConstants.githubRepositoryURL
+        ]))
+
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: AppConstants.appName,
+            .applicationVersion: AppConstants.currentVersion,
+            .version: AppConstants.currentBuildNumber,
+            .credits: credits,
+            NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): AppConstants.copyright
+        ])
     }
 
     @objc private func runRepoStatusAction(_ sender: NSMenuItem) {
@@ -192,7 +289,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: L("About RepoShell", "关于 RepoShell"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let aboutItem = NSMenuItem(title: L("About RepoShell", "关于 RepoShell"), action: #selector(showAboutPanel), keyEquivalent: "")
+        aboutItem.target = self
+        appMenu.addItem(aboutItem)
+        if let update = AppContainer.shared.updateController.availableUpdate {
+            let upgradeItem = NSMenuItem(
+                title: String(format: L("Update to v%@…", "发现新版本 v%@（点击升级）…"), update.latestVersion),
+                action: #selector(upgradeAppAction),
+                keyEquivalent: ""
+            )
+            upgradeItem.target = self
+            upgradeItem.image = MenuActionIconRenderer.redDotBadgeIcon(size: 14)
+            appMenu.addItem(upgradeItem)
+        } else {
+            let checkItem = NSMenuItem(title: L("Check for Updates…", "检查更新…"), action: #selector(checkForUpdatesAction), keyEquivalent: "")
+            checkItem.target = self
+            appMenu.addItem(checkItem)
+        }
         appMenu.addItem(.separator())
         let prefItem = NSMenuItem(title: L("Settings…", "偏好设置…"), action: #selector(openMainAction), keyEquivalent: ",")
         prefItem.target = self

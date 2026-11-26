@@ -83,6 +83,18 @@ public struct RepositoryEntry: Codable, Identifiable, Equatable, Sendable {
     public var isAutoDiscovered: Bool
     public var parentRootPath: String?
     public var authConfig: RepoAuthConfig
+    public var isStarred: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case path
+        case name
+        case vcsType
+        case isAutoDiscovered
+        case parentRootPath
+        case authConfig
+        case isStarred
+    }
 
     public init(
         id: UUID = UUID(),
@@ -91,7 +103,8 @@ public struct RepositoryEntry: Codable, Identifiable, Equatable, Sendable {
         vcsType: VcsType = .git,
         isAutoDiscovered: Bool = false,
         parentRootPath: String? = nil,
-        authConfig: RepoAuthConfig = RepoAuthConfig()
+        authConfig: RepoAuthConfig = RepoAuthConfig(),
+        isStarred: Bool = false
     ) {
         let norm = PathUtils.normalize(path)
         self.id = id
@@ -101,6 +114,34 @@ public struct RepositoryEntry: Codable, Identifiable, Equatable, Sendable {
         self.isAutoDiscovered = isAutoDiscovered
         self.parentRootPath = parentRootPath.map { PathUtils.normalize($0) }
         self.authConfig = authConfig
+        self.isStarred = isStarred
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        let rawPath = try c.decode(String.self, forKey: .path)
+        let norm = PathUtils.normalize(rawPath)
+        self.path = norm
+        self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? URL(fileURLWithPath: norm).lastPathComponent
+        self.vcsType = try c.decodeIfPresent(VcsType.self, forKey: .vcsType) ?? .git
+        self.isAutoDiscovered = try c.decodeIfPresent(Bool.self, forKey: .isAutoDiscovered) ?? false
+        self.parentRootPath = try c.decodeIfPresent(String.self, forKey: .parentRootPath)
+        self.authConfig = try c.decodeIfPresent(RepoAuthConfig.self, forKey: .authConfig) ?? RepoAuthConfig()
+        self.isStarred = try c.decodeIfPresent(Bool.self, forKey: .isStarred) ?? false
+    }
+
+    public static func sortedForDisplay(_ repos: [RepositoryEntry]) -> [RepositoryEntry] {
+        repos.sorted { lhs, rhs in
+            if lhs.isStarred != rhs.isStarred {
+                return lhs.isStarred
+            }
+            let nameCmp = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            if nameCmp != .orderedSame {
+                return nameCmp == .orderedAscending
+            }
+            return lhs.path.localizedStandardCompare(rhs.path) == .orderedAscending
+        }
     }
 }
 
@@ -160,6 +201,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var svnLogLimit: Int
     public var svnDeleteForce: Bool
     public var svnTopLevelMenuActions: [MenuAction]
+    public var autoCheckUpdates: Bool
 
     public static let defaultTopLevelMenuActions: [MenuAction] = [
         .gitCommit,
@@ -237,6 +279,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         case svnLogLimit
         case svnDeleteForce
         case svnTopLevelMenuActions
+        case autoCheckUpdates
     }
 
     public init(
@@ -277,7 +320,8 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         svnDylibPath: String = "",
         svnLogLimit: Int = 100,
         svnDeleteForce: Bool = false,
-        svnTopLevelMenuActions: [MenuAction] = AppPreferences.defaultSvnTopLevelMenuActions
+        svnTopLevelMenuActions: [MenuAction] = AppPreferences.defaultSvnTopLevelMenuActions,
+        autoCheckUpdates: Bool = true
     ) {
         self.cascadeMenu = cascadeMenu
         self.showMenuIcons = showMenuIcons
@@ -309,6 +353,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         self.svnLogLimit = svnLogLimit
         self.svnDeleteForce = svnDeleteForce
         self.svnTopLevelMenuActions = svnTopLevelMenuActions
+        self.autoCheckUpdates = autoCheckUpdates
     }
 
     public init(from decoder: Decoder) throws {
@@ -344,6 +389,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         self.svnLogLimit = try c.decodeIfPresent(Int.self, forKey: .svnLogLimit) ?? defaults.svnLogLimit
         self.svnDeleteForce = try c.decodeIfPresent(Bool.self, forKey: .svnDeleteForce) ?? defaults.svnDeleteForce
         self.svnTopLevelMenuActions = try c.decodeIfPresent([MenuAction].self, forKey: .svnTopLevelMenuActions) ?? Self.defaultSvnTopLevelMenuActions
+        self.autoCheckUpdates = try c.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? defaults.autoCheckUpdates
     }
 }
 
@@ -554,5 +600,43 @@ public struct RecentHistoryData: Codable, Equatable, Sendable {
         self.remoteURLs = try c.decodeIfPresent([String].self, forKey: .remoteURLs) ?? []
         self.svnCommitMessages = try c.decodeIfPresent([String].self, forKey: .svnCommitMessages) ?? []
         self.svnRepoURLs = try c.decodeIfPresent([String].self, forKey: .svnRepoURLs) ?? []
+    }
+}
+
+public struct AppUpdateState: Codable, Equatable, Sendable {
+    public var latestVersion: String
+    public var tagName: String
+    public var releaseName: String
+    public var releaseNotes: String
+    public var htmlURL: String
+    public var downloadURL: String?
+    public var assetName: String?
+    public var assetSize: Int64?
+    public var checkedAt: Date
+
+    public init(
+        latestVersion: String,
+        tagName: String,
+        releaseName: String = "",
+        releaseNotes: String = "",
+        htmlURL: String,
+        downloadURL: String? = nil,
+        assetName: String? = nil,
+        assetSize: Int64? = nil,
+        checkedAt: Date = Date()
+    ) {
+        self.latestVersion = latestVersion
+        self.tagName = tagName
+        self.releaseName = releaseName
+        self.releaseNotes = releaseNotes
+        self.htmlURL = htmlURL
+        self.downloadURL = downloadURL
+        self.assetName = assetName
+        self.assetSize = assetSize
+        self.checkedAt = checkedAt
+    }
+
+    public func isNewer(than currentVersion: String) -> Bool {
+        SemanticVersion.isUpdateAvailable(latest: latestVersion, current: currentVersion)
     }
 }

@@ -5,6 +5,7 @@ import RepoShellServices
 
 struct GeneralTabView: View {
     @ObservedObject private var repoManager = AppContainer.shared.repositoryManager
+    @ObservedObject private var updateController = AppContainer.shared.updateController
     @State private var extensionEnabled: Bool = false
     @State private var installedDiffTools: [DetectedToolInfo] = []
     @State private var installedMergeTools: [DetectedToolInfo] = []
@@ -46,95 +47,6 @@ struct GeneralTabView: View {
             // General Options
             Section(header: Text(L("General Options", "通用选项"))) {
                 Toggle(L("Cascade context menu items", "级联显示右键菜单项"), isOn: binding(\.cascadeMenu))
-                if repoManager.config.preferences.cascadeMenu {
-                    DisclosureGroup(L("Git top-level context menu actions", "Git 右键一级菜单常用操作")) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(L(
-                                "Selected actions appear directly in Finder's top-level context menu; remaining actions stay in the RepoShell submenu.",
-                                "勾选的操作将直接显示在访达右键一级菜单中，其余操作收纳在 RepoShell 子菜单内。"
-                            ))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                            let loc = Localization(language: repoManager.config.preferences.language)
-                            LazyVGrid(
-                                columns: [GridItem(.flexible()), GridItem(.flexible())],
-                                alignment: .leading,
-                                spacing: 6
-                            ) {
-                                ForEach(AppPreferences.promotableMenuActions, id: \.self) { action in
-                                    Toggle(isOn: topLevelActionBinding(action)) {
-                                        HStack(spacing: 6) {
-                                            Image(nsImage: MenuActionIconRenderer.menuIcon(for: action, size: 15))
-                                                .frame(width: 15, height: 15)
-                                            Text(loc.string(action.localizationKey))
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-
-                            HStack(spacing: 10) {
-                                Button(L("Reset Defaults", "恢复默认")) {
-                                    repoManager.updatePreferences { prefs in
-                                        prefs.topLevelMenuActions = AppPreferences.defaultTopLevelMenuActions
-                                    }
-                                }
-                                Button(L("All in Submenu", "全部收纳到子菜单")) {
-                                    repoManager.updatePreferences { prefs in
-                                        prefs.topLevelMenuActions = []
-                                    }
-                                }
-                            }
-                            .controlSize(.small)
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    DisclosureGroup(L("SVN top-level context menu actions", "SVN 右键一级菜单常用操作")) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(L(
-                                "Selected SVN actions appear directly in Finder's top-level context menu for SVN working copies.",
-                                "勾选的 SVN 操作将直接显示在访达右键一级菜单中，其余操作收纳在 RepoShell 子菜单内。"
-                            ))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                            let loc = Localization(language: repoManager.config.preferences.language)
-                            LazyVGrid(
-                                columns: [GridItem(.flexible()), GridItem(.flexible())],
-                                alignment: .leading,
-                                spacing: 6
-                            ) {
-                                ForEach(AppPreferences.promotableSvnMenuActions, id: \.self) { action in
-                                    Toggle(isOn: svnTopLevelActionBinding(action)) {
-                                        HStack(spacing: 6) {
-                                            Image(nsImage: MenuActionIconRenderer.menuIcon(for: action, size: 15))
-                                                .frame(width: 15, height: 15)
-                                            Text(loc.string(action.localizationKey))
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-
-                            HStack(spacing: 10) {
-                                Button(L("Reset Defaults", "恢复默认")) {
-                                    repoManager.updatePreferences { prefs in
-                                        prefs.svnTopLevelMenuActions = AppPreferences.defaultSvnTopLevelMenuActions
-                                    }
-                                }
-                                Button(L("All in Submenu", "全部收纳到子菜单")) {
-                                    repoManager.updatePreferences { prefs in
-                                        prefs.svnTopLevelMenuActions = []
-                                    }
-                                }
-                            }
-                            .controlSize(.small)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
                 Toggle(L("Show icons in context menu", "在右键菜单中显示图标"), isOn: binding(\.showMenuIcons))
                 Toggle(L("Show in menu bar (hide Dock icon)", "在菜单栏中显示（不在 Dock 上显示）"), isOn: binding(\.showInMenuBar))
                 Toggle(L("Show preferences window on launch", "启动时显示此窗口"), isOn: binding(\.showPreferencesOnLaunch))
@@ -235,6 +147,77 @@ struct GeneralTabView: View {
                     colors: binding(\.darkColors)
                 )
             }
+
+            // About & Updates
+            Section(header: Text(L("About & Updates", "关于与软件更新"))) {
+                LabeledContent(L("Version", "版本号")) {
+                    Text("\(AppConstants.currentVersion) (\(AppConstants.currentBuildNumber))")
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                }
+                LabeledContent(L("Developer", "开发者")) {
+                    HStack(spacing: 6) {
+                        Text(AppConstants.developerName)
+                        Text("·").foregroundColor(.secondary)
+                        if let mailURL = URL(string: "mailto:\(AppConstants.developerEmail)") {
+                            Link(AppConstants.developerEmail, destination: mailURL)
+                        } else {
+                            Text(AppConstants.developerEmail)
+                        }
+                    }
+                }
+                LabeledContent("GitHub") {
+                    Link(AppConstants.githubRepoSlug, destination: AppConstants.githubRepositoryURL)
+                }
+                Toggle(L("Automatically check for updates", "自动检测新版本"), isOn: binding(\.autoCheckUpdates))
+
+                HStack(spacing: 10) {
+                    if let update = updateController.availableUpdate {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                        Text(String(format: L("New version v%@ available", "发现新版本 v%@"), update.latestVersion))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Button(L("Upgrade Now…", "立即升级…")) {
+                            updateController.startUpgrade()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if case .checking = updateController.phase {
+                        ProgressView().controlSize(.small)
+                        Text(L("Checking for updates…", "正在检查更新…"))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    } else {
+                        if case .upToDate = updateController.phase {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text(L("Up to date", "已是最新版本"))
+                                .foregroundColor(.secondary)
+                        } else if case .failed(let msg) = updateController.phase {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(msg)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                    }
+
+                    Button(L("Check for Updates", "检查更新")) {
+                        Task {
+                            await updateController.checkForUpdates(userInitiated: true)
+                        }
+                    }
+                    .disabled({
+                        if case .checking = updateController.phase { return true }
+                        if case .downloading = updateController.phase { return true }
+                        if case .installing = updateController.phase { return true }
+                        return false
+                    }())
+                }
+            }
         }
         .formStyle(.grouped)
         .onAppear {
@@ -256,40 +239,6 @@ struct GeneralTabView: View {
                 }
                 if keyPath == \.useFinderTagsForCloudDrives || keyPath == \.useFinderTagsForLocalRepos {
                     AppContainer.shared.statusEngine.refreshAllRepositories()
-                }
-            }
-        )
-    }
-
-    private func topLevelActionBinding(_ action: MenuAction) -> Binding<Bool> {
-        Binding(
-            get: { repoManager.config.preferences.topLevelMenuActions.contains(action) },
-            set: { enabled in
-                repoManager.updatePreferences { prefs in
-                    var selected = Set(prefs.topLevelMenuActions)
-                    if enabled {
-                        selected.insert(action)
-                    } else {
-                        selected.remove(action)
-                    }
-                    prefs.topLevelMenuActions = AppPreferences.promotableMenuActions.filter { selected.contains($0) }
-                }
-            }
-        )
-    }
-
-    private func svnTopLevelActionBinding(_ action: MenuAction) -> Binding<Bool> {
-        Binding(
-            get: { repoManager.config.preferences.svnTopLevelMenuActions.contains(action) },
-            set: { enabled in
-                repoManager.updatePreferences { prefs in
-                    var selected = Set(prefs.svnTopLevelMenuActions)
-                    if enabled {
-                        selected.insert(action)
-                    } else {
-                        selected.remove(action)
-                    }
-                    prefs.svnTopLevelMenuActions = AppPreferences.promotableSvnMenuActions.filter { selected.contains($0) }
                 }
             }
         )

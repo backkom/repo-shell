@@ -35,8 +35,8 @@ public enum MenuActionIconRenderer {
         }
     }
 
-    public static func appBrandMenuIcon(size: CGFloat = 16) -> NSImage {
-        let key = "brand|\(Int((size * 10).rounded()))"
+    public static func appBrandMenuIcon(size: CGFloat = 16, showUpdateDot: Bool = false) -> NSImage {
+        let key = "brand|\(Int((size * 10).rounded()))|\(showUpdateDot)"
         return cachedImage(forKey: key, size: size) {
             renderBitmap(pointSize: size) { rect in
                 let badgeRect = rect.insetBy(dx: 0.5, dy: 0.5)
@@ -53,6 +53,37 @@ public enum MenuActionIconRenderer {
                     let configured = glyph.withSymbolConfiguration(symCfg) ?? glyph
                     drawCentered(configured, in: badgeRect.insetBy(dx: 2.0, dy: 2.0))
                 }
+
+                if showUpdateDot {
+                    let dotSize = max(5.0, size * 0.36)
+                    let dotRect = NSRect(
+                        x: rect.maxX - dotSize - 0.3,
+                        y: rect.maxY - dotSize - 0.3,
+                        width: dotSize,
+                        height: dotSize
+                    )
+                    NSColor.white.setFill()
+                    NSBezierPath(ovalIn: dotRect.insetBy(dx: -0.9, dy: -0.9)).fill()
+                    NSColor(srgbRed: 1.0, green: 0.23, blue: 0.19, alpha: 1.0).setFill()
+                    NSBezierPath(ovalIn: dotRect).fill()
+                }
+            }
+        }
+    }
+
+    public static func redDotBadgeIcon(size: CGFloat = 16) -> NSImage {
+        let key = "reddot|\(Int((size * 10).rounded()))"
+        return cachedImage(forKey: key, size: size) {
+            renderBitmap(pointSize: size) { rect in
+                let dotDiameter = max(7.0, size * 0.54)
+                let dotRect = NSRect(
+                    x: rect.midX - dotDiameter * 0.5,
+                    y: rect.midY - dotDiameter * 0.5,
+                    width: dotDiameter,
+                    height: dotDiameter
+                )
+                NSColor(srgbRed: 1.0, green: 0.23, blue: 0.19, alpha: 1.0).setFill()
+                NSBezierPath(ovalIn: dotRect).fill()
             }
         }
     }

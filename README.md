@@ -1,6 +1,10 @@
 # RepoShell
 
-**RepoShell** 是一款面向 macOS (13.0 Ventura+) 的原生版本控制图形客户端与 Finder 集成工具，复刻自 SnailGit 与 SnailSVN 的经典 Tortoise 风格交互体验。
+**RepoShell** (v0.1.0) 是一款面向 macOS (13.0 Ventura+) 的原生版本控制图形客户端与 Finder 集成工具，提供经典的 Tortoise 风格交互体验。
+
+- **开发者**：leaf (`flying_butterfly@126.com`)
+- **当前版本**：`0.1.0`
+- **GitHub 仓库**：`https://github.com/backkom/repo-shell`
 
 - **V1**：完整支持 **Git**（全部基础工作流 + 进阶功能：交互式 Rebase、Cherry-Pick、RefLog、Repo-browser、版本对比、Blame、Submodules、Changelists、隐藏文件规则、Commit Notes、内置图片对比、20+ 外部 Diff/Merge 工具、每仓库认证管理、Finder 标签着色与 Quick Actions）。
 - **V2（预留架构）**：基于统一 `VcsProvider` 抽象层无缝接入 **SVN**。

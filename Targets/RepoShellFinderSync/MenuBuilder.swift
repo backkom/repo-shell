@@ -14,6 +14,7 @@ enum MenuBuilder {
         cascade: Bool,
         topLevelActions: [MenuAction] = [],
         showIcons: Bool,
+        showUpdateDot: Bool = false,
         targetDirectoryPath: String,
         selectedPaths: [String],
         repoPath: String?,
@@ -59,8 +60,8 @@ enum MenuBuilder {
                 )
                 let topItem = NSMenuItem(title: AppConstants.appName, action: nil, keyEquivalent: "")
                 topItem.submenu = subMenu
-                if showIcons {
-                    topItem.image = MenuActionIconRenderer.appBrandMenuIcon()
+                if showIcons || showUpdateDot {
+                    topItem.image = MenuActionIconRenderer.appBrandMenuIcon(showUpdateDot: showUpdateDot)
                 }
                 rootMenu.addItem(topItem)
             }
@@ -114,7 +115,9 @@ enum MenuBuilder {
                 let menuItem = NSMenuItem(title: title, action: selector, keyEquivalent: "")
                 menuItem.target = target
                 menuItem.tag = tag
-                if showIcons {
+                if action == .upgradeApp {
+                    menuItem.image = MenuActionIconRenderer.redDotBadgeIcon()
+                } else if showIcons {
                     menuItem.image = MenuActionIconRenderer.menuIcon(for: action)
                 }
                 menu.addItem(menuItem)

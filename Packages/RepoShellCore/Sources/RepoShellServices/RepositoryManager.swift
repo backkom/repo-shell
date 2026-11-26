@@ -80,9 +80,17 @@ public final class RepositoryManager: ObservableObject, @unchecked Sendable {
             authConfig: authConfig
         )
         next.repositories.append(entry)
-        next.repositories.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        next.repositories = RepositoryEntry.sortedForDisplay(next.repositories)
         persistAndNotify(next)
         return entry
+    }
+
+    public func toggleStar(id: UUID) {
+        var next = currentConfigSnapshot()
+        guard let idx = next.repositories.firstIndex(where: { $0.id == id }) else { return }
+        next.repositories[idx].isStarred.toggle()
+        next.repositories = RepositoryEntry.sortedForDisplay(next.repositories)
+        persistAndNotify(next)
     }
 
     public func removeRepository(id: UUID) {
@@ -167,8 +175,8 @@ public final class RepositoryManager: ObservableObject, @unchecked Sendable {
         let manualRepos = existing.filter { !$0.isAutoDiscovered && !normalizedExcluded.contains($0.path) }
         var byPath: [String: RepositoryEntry] = Dictionary(uniqueKeysWithValues: manualRepos.map { ($0.path, $0) })
 
-        // Preserve auth configs for previously discovered repos
-        let previousAuthByPath = Dictionary(uniqueKeysWithValues: existing.map { ($0.path, $0.authConfig) })
+        // Preserve auth configs, starred flags, and UUIDs for previously discovered repos
+        let previousByPath = Dictionary(existing.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
 
         let fm = FileManager.default
         let skippedNames: Set<String> = [
@@ -182,12 +190,15 @@ public final class RepositoryManager: ObservableObject, @unchecked Sendable {
             let gitMarker = dir.appendingPathComponent(".git")
             if fm.fileExists(atPath: gitMarker.path) {
                 if byPath[norm] == nil {
+                    let prev = previousByPath[norm]
                     byPath[norm] = RepositoryEntry(
+                        id: prev?.id ?? UUID(),
                         path: norm,
                         vcsType: .git,
                         isAutoDiscovered: true,
                         parentRootPath: rootPath,
-                        authConfig: previousAuthByPath[norm] ?? RepoAuthConfig()
+                        authConfig: prev?.authConfig ?? RepoAuthConfig(),
+                        isStarred: prev?.isStarred ?? false
                     )
                 }
                 return // Do not recurse inside a git repo unless configured manually as submodule
@@ -196,12 +207,15 @@ public final class RepositoryManager: ObservableObject, @unchecked Sendable {
             let svnMarker = dir.appendingPathComponent(".svn")
             if fm.fileExists(atPath: svnMarker.path) {
                 if byPath[norm] == nil {
+                    let prev = previousByPath[norm]
                     byPath[norm] = RepositoryEntry(
+                        id: prev?.id ?? UUID(),
                         path: norm,
                         vcsType: .svn,
                         isAutoDiscovered: true,
                         parentRootPath: rootPath,
-                        authConfig: previousAuthByPath[norm] ?? RepoAuthConfig()
+                        authConfig: prev?.authConfig ?? RepoAuthConfig(),
+                        isStarred: prev?.isStarred ?? false
                     )
                 }
                 return
@@ -233,7 +247,7 @@ public final class RepositoryManager: ObservableObject, @unchecked Sendable {
             }
         }
 
-        return byPath.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return RepositoryEntry.sortedForDisplay(Array(byPath.values))
     }
 
     public func currentConfigSnapshot() -> SharedConfig {

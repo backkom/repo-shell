@@ -204,6 +204,7 @@ final class ServicesTests: XCTestCase {
         let decoded = try JSONDecoder().decode(SharedConfig.self, from: data)
         XCTAssertEqual(decoded.repositories.count, 1)
         XCTAssertEqual(decoded.repositories[0].path, "/tmp/legacy-repo")
+        XCTAssertFalse(decoded.repositories[0].isStarred)
         XCTAssertEqual(decoded.preferences.diffToolId, "bcomp")
         XCTAssertTrue(decoded.preferences.hasCompletedSetupWizard)
         XCTAssertEqual(decoded.preferences.topLevelMenuActions, AppPreferences.defaultTopLevelMenuActions)
@@ -266,5 +267,117 @@ final class ServicesTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: propsWf.appendingPathComponent("Contents/document.wflow").path))
         try qa.uninstall(action: .svnUpdate, language: .en)
         try qa.uninstall(action: .svnProperties, language: .en)
+    }
+
+    func testRepositoryStarToggleSortingAndRescanPreservation() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let storageDir = dir.appendingPathComponent("storage", isDirectory: true)
+        let workspace = dir.appendingPathComponent("workspace", isDirectory: true)
+        let alpha = workspace.appendingPathComponent("alpha", isDirectory: true)
+        let zeta = workspace.appendingPathComponent("zeta", isDirectory: true)
+        try FileManager.default.createDirectory(at: alpha.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: zeta.appendingPathComponent(".git"), withIntermediateDirectories: true)
+
+        let storage = SharedStorage(baseDirectoryURL: storageDir)
+        let mgr = RepositoryManager(storage: storage)
+        let initial = mgr.addWorkspaceRoot(at: workspace.path, maxDepth: 2)
+        XCTAssertEqual(initial.map(\.name), ["alpha", "zeta"])
+
+        let zetaEntry = try XCTUnwrap(initial.first(where: { $0.name == "zeta" }))
+        mgr.toggleStar(id: zetaEntry.id)
+
+        let afterStar = storage.loadConfig().repositories
+        XCTAssertEqual(afterStar.map(\.name), ["zeta", "alpha"])
+        XCTAssertTrue(afterStar[0].isStarred)
+        XCTAssertFalse(afterStar[1].isStarred)
+
+        let afterRescan = mgr.rescanWorkspaceRoots()
+        XCTAssertEqual(afterRescan.map(\.name), ["zeta", "alpha"])
+        XCTAssertEqual(afterRescan[0].id, zetaEntry.id)
+        XCTAssertTrue(afterRescan[0].isStarred)
+    }
+
+    func testSemanticVersionComparisonAndGitHubReleaseParsing() async throws {
+        XCTAssertTrue(SemanticVersion.isUpdateAvailable(latest: "v0.2.0", current: "0.1.0"))
+        XCTAssertTrue(SemanticVersion.isUpdateAvailable(latest: "0.1.1", current: "0.1.0"))
+        XCTAssertTrue(SemanticVersion.isUpdateAvailable(latest: "0.2.0", current: "0.2.0-beta.1"))
+        XCTAssertFalse(SemanticVersion.isUpdateAvailable(latest: "v0.1.0", current: "0.1.0"))
+        XCTAssertFalse(SemanticVersion.isUpdateAvailable(latest: "0.0.9", current: "0.1.0"))
+
+        XCTAssertEqual(AppConstants.developerName, "leaf")
+        XCTAssertEqual(AppConstants.developerEmail, "flying_butterfly@126.com")
+        XCTAssertEqual(AppConstants.defaultVersion, "0.1.0")
+        XCTAssertEqual(AppConstants.githubRepo, "backkom/repo-shell")
+
+        let releaseJSON = """
+        {
+          "tag_name": "v0.2.0",
+          "name": "RepoShell 0.2.0",
+          "body": "Bug fixes and improvements",
+          "html_url": "https://github.com/backkom/repo-shell/releases/tag/v0.2.0",
+          "draft": false,
+          "prerelease": false,
+          "published_at": "2026-11-26T08:00:00Z",
+          "assets": [
+            {
+              "name": "RepoShell-0.2.0-macOS.dmg",
+              "browser_download_url": "https://github.com/backkom/repo-shell/releases/download/v0.2.0/RepoShell-0.2.0-macOS.dmg",
+              "size": 123456
+            },
+            {
+              "name": "RepoShell-0.2.0-macOS.zip",
+              "browser_download_url": "https://github.com/backkom/repo-shell/releases/download/v0.2.0/RepoShell-0.2.0-macOS.zip",
+              "size": 120000
+            }
+          ]
+        }
+        """
+        let client = AppUpdateClient { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(releaseJSON.utf8), response)
+        }
+
+        let result = try await client.checkForUpdate(repoSlug: "backkom/repo-shell", currentVersion: "0.1.0")
+        guard case .updateAvailable(let info) = result else {
+            return XCTFail("Expected updateAvailable, got \(result)")
+        }
+        XCTAssertEqual(info.latestVersion, "0.2.0")
+        XCTAssertEqual(info.assetName, "RepoShell-0.2.0-macOS.zip")
+        XCTAssertEqual(info.downloadURL, "https://github.com/backkom/repo-shell/releases/download/v0.2.0/RepoShell-0.2.0-macOS.zip")
+
+        let upToDateResult = try await client.checkForUpdate(repoSlug: "backkom/repo-shell", currentVersion: "0.2.0")
+        XCTAssertEqual(upToDateResult, .upToDate(currentVersion: "0.2.0", latestVersion: "0.2.0"))
+
+        let notFoundClient = AppUpdateClient { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 404,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+        let noReleaseResult = try await notFoundClient.checkForUpdate(repoSlug: "backkom/repo-shell", currentVersion: "0.1.0")
+        XCTAssertEqual(noReleaseResult, .noPublishedRelease)
+
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storage = SharedStorage(baseDirectoryURL: dir)
+        try storage.saveUpdateState(info)
+        let loaded = try XCTUnwrap(storage.loadUpdateState())
+        XCTAssertEqual(loaded.latestVersion, info.latestVersion)
+        XCTAssertEqual(loaded.tagName, info.tagName)
+        XCTAssertEqual(loaded.downloadURL, info.downloadURL)
+        XCTAssertEqual(loaded.assetName, info.assetName)
+        XCTAssertEqual(loaded.assetSize, info.assetSize)
+        try storage.saveUpdateState(nil)
+        XCTAssertNil(storage.loadUpdateState())
     }
 }

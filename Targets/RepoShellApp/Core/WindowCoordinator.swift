@@ -28,6 +28,24 @@ final class WindowCoordinator {
         ctrl.showAndFocus()
     }
 
+    func openUpdateWindow() {
+        let key = "software-update"
+        if let existing = controllers[key] {
+            existing.showAndFocus()
+            return
+        }
+        let ctrl = HostedWindowController(
+            title: L("Software Update", "软件更新"),
+            size: NSSize(width: 520, height: 380),
+            minSize: NSSize(width: 460, height: 320),
+            rootView: UpdateWindowView()
+        ) { [weak self] in
+            self?.controllers.removeValue(forKey: key)
+        }
+        controllers[key] = ctrl
+        ctrl.showAndFocus()
+    }
+
     func openSetupWizard() {
         let key = "setup-wizard"
         if let existing = controllers[key] {
@@ -98,6 +116,9 @@ final class WindowCoordinator {
         switch action {
         case .showApp:
             openMainWindow(selectedTab: .repositories)
+
+        case .upgradeApp:
+            container.updateController.startUpgrade()
 
         case .addRepository:
             let candidate = selectedPaths.first ?? targetDir

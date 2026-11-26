@@ -188,6 +188,8 @@ final class MenuAndStatusTests: XCTestCase {
             assertColoredBitmap(MenuActionIconRenderer.menuIcon(for: action), label: "MenuAction.\(action.rawValue)")
         }
         assertColoredBitmap(MenuActionIconRenderer.appBrandMenuIcon(), label: "appBrandMenuIcon")
+        assertColoredBitmap(MenuActionIconRenderer.appBrandMenuIcon(showUpdateDot: true), label: "appBrandMenuIconWithDot")
+        assertColoredBitmap(MenuActionIconRenderer.redDotBadgeIcon(), label: "redDotBadgeIcon")
         assertColoredBitmap(MenuActionIconRenderer.submenuIcon(symbolName: "shippingbox.fill"), label: "submenuIcon")
         #endif
     }
@@ -267,5 +269,27 @@ final class MenuAndStatusTests: XCTestCase {
             return nil
         }
         XCTAssertEqual(topActions, [.svnUpdate, .svnCommit, .showLog, .checkForModifications])
+    }
+
+    func testUpgradeAppMenuItemAppearsWhenUpdateIsAvailable() {
+        let ctx = MenuResolutionContext(
+            targetDirectoryPath: "/tmp/not-a-repo",
+            selectedPaths: ["/tmp/not-a-repo"],
+            matchedRepo: nil,
+            snapshot: nil,
+            diffLaterState: nil,
+            directoryContainsGitFolder: false,
+            language: .en,
+            availableUpdateVersion: "0.2.0"
+        )
+        let resolved = MenuVisibilityResolver.resolveMenu(for: ctx)
+        let upgradeItem = resolved.compactMap { item -> (MenuAction, String)? in
+            if case .item(let action, let title) = item, action == .upgradeApp {
+                return (action, title)
+            }
+            return nil
+        }.first
+        XCTAssertNotNil(upgradeItem)
+        XCTAssertEqual(upgradeItem?.1, "Update to v0.2.0…")
     }
 }

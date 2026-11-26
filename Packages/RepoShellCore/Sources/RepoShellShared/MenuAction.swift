@@ -20,6 +20,7 @@ public enum MenuActionIconStyle: Equatable, Sendable {
 public enum MenuAction: String, Codable, CaseIterable, Sendable {
     // General & Repository Registration
     case showApp = "show-app"
+    case upgradeApp = "upgrade-app"
     case addRepository = "add-repository"
     case excludeRepository = "exclude-repository"
     case refresh = "refresh"
@@ -72,7 +73,7 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
     case submoduleUpdate = "submodule-update"
     case submoduleManage = "submodule-manage"
 
-    // SVN Basic & Advanced Operations (SnailSVN 1.10 parity)
+    // SVN Basic & Advanced Operations
     case svnCommit = "svn-commit"
     case svnCheckout = "svn-checkout"
     case svnCreateRepo = "svn-create-repo"
@@ -119,6 +120,7 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
     public var systemSymbolName: String {
         switch self {
         case .showApp: return "app.badge.fill"
+        case .upgradeApp: return "arrow.down.circle.fill"
         case .addRepository: return "plus.rectangle.on.folder.fill"
         case .excludeRepository: return "folder.fill.badge.minus"
         case .refresh: return "arrow.clockwise.circle.fill"
@@ -188,6 +190,8 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
             return .badge(fill: RGBColor(r: 219, g: 68, b: 143))
         case .showApp:
             return .twoTone(primary: RGBColor(r: 224, g: 62, b: 62), secondary: RGBColor(r: 29, g: 124, b: 242))
+        case .upgradeApp:
+            return .badge(fill: RGBColor(r: 229, g: 57, b: 53))
         case .addRepository, .gitInit, .svnCreateRepo:
             return .twoTone(primary: RGBColor(r: 34, g: 168, b: 83), secondary: RGBColor(r: 29, g: 124, b: 242))
         case .excludeRepository:
@@ -241,6 +245,7 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
     public var localizationKey: String {
         switch self {
         case .showApp: return "menu.showApp"
+        case .upgradeApp: return "menu.upgradeApp"
         case .addRepository: return "menu.addRepository"
         case .excludeRepository: return "menu.excludeRepository"
         case .refresh: return "menu.refresh"
@@ -323,6 +328,7 @@ public struct MenuResolutionContext: Sendable {
     public var directoryContainsSvnFolder: Bool
     public var isDirectoryCleanRepoCandidate: Bool
     public var language: AppLanguage
+    public var availableUpdateVersion: String?
 
     public init(
         targetDirectoryPath: String,
@@ -333,7 +339,8 @@ public struct MenuResolutionContext: Sendable {
         directoryContainsGitFolder: Bool,
         directoryContainsSvnFolder: Bool = false,
         isDirectoryCleanRepoCandidate: Bool = true,
-        language: AppLanguage = .system
+        language: AppLanguage = .system,
+        availableUpdateVersion: String? = nil
     ) {
         self.targetDirectoryPath = PathUtils.normalize(targetDirectoryPath)
         self.selectedPaths = selectedPaths.map { PathUtils.normalize($0) }
@@ -344,6 +351,7 @@ public struct MenuResolutionContext: Sendable {
         self.directoryContainsSvnFolder = directoryContainsSvnFolder
         self.isDirectoryCleanRepoCandidate = isDirectoryCleanRepoCandidate
         self.language = language
+        self.availableUpdateVersion = availableUpdateVersion
     }
 }
 
@@ -371,6 +379,9 @@ public enum MenuVisibilityResolver {
             }
             items.append(.item(action: .svnImport, title: loc.string("menu.svnImport")))
             items.append(.separator)
+            if let ver = context.availableUpdateVersion, !ver.isEmpty {
+                items.append(.item(action: .upgradeApp, title: String(format: loc.string("menu.upgradeAppVersion"), ver)))
+            }
             items.append(.item(action: .showApp, title: loc.string("menu.showApp")))
             return items
         }
@@ -518,6 +529,9 @@ public enum MenuVisibilityResolver {
         if isRepoRootSelected {
             items.append(.item(action: .excludeRepository, title: loc.string("menu.excludeRepository")))
         }
+        if let ver = context.availableUpdateVersion, !ver.isEmpty {
+            items.append(.item(action: .upgradeApp, title: String(format: loc.string("menu.upgradeAppVersion"), ver)))
+        }
         items.append(.item(action: .showApp, title: loc.string("menu.showApp")))
 
         return items
@@ -635,6 +649,9 @@ public enum MenuVisibilityResolver {
         items.append(.item(action: .refresh, title: loc.string("menu.refresh")))
         if isRepoRootSelected {
             items.append(.item(action: .excludeRepository, title: loc.string("menu.excludeRepository")))
+        }
+        if let ver = context.availableUpdateVersion, !ver.isEmpty {
+            items.append(.item(action: .upgradeApp, title: String(format: loc.string("menu.upgradeAppVersion"), ver)))
         }
         items.append(.item(action: .showApp, title: loc.string("menu.showApp")))
 

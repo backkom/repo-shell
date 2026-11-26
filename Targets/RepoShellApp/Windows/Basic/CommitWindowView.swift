@@ -50,6 +50,7 @@ struct CommitWindowView: View {
 
     @State private var items: [VcsStatusItem] = []
     @State private var selectedPaths: Set<String> = []
+    @State private var highlightedPaths: Set<String> = []
     @State private var changelists: [Changelist] = []
     @State private var hiddenRules: [String] = []
     @State private var recentMessages: [String] = []
@@ -71,6 +72,29 @@ struct CommitWindowView: View {
                 return false
             }
             return true
+        }
+    }
+
+    private var commitRows: [CommitFileRow] {
+        filteredItems.map { item in
+            let detail: String
+            if let add = item.additions, let del = item.deletions {
+                detail = "+\(add) -\(del)"
+            } else if let size = item.fileSize {
+                detail = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+            } else {
+                detail = ""
+            }
+            return CommitFileRow(
+                relativePath: item.relativePath,
+                absolutePath: item.absolutePath,
+                extensionText: item.isDirectory ? "" : URL(fileURLWithPath: item.relativePath).pathExtension,
+                status: item.status,
+                statusDisplayText: AppContainer.shared.localized(item.status.localizedLabelKey),
+                isDirectory: item.isDirectory,
+                detailText: detail,
+                tooltipText: item.relativePath
+            )
         }
     }
 
@@ -96,174 +120,221 @@ struct CommitWindowView: View {
             }
 
             // Header bar
-            HStack {
-                Text(L("Commit to:", "提交至：") + " ")
+            HStack(spacing: 8) {
+                Text(L("Commit to:", "提交至："))
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
                 Label(branchName.isEmpty ? "HEAD" : branchName, systemImage: "arrow.triangle.branch")
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                Button(L("Manage Changelists…", "管理变更列表…")) {
+                Button(L("Manage Changelists…", "变更列表…")) {
                     AppContainer.shared.windowCoordinator.openChangelists(repoPath: repoPath)
                 }
-                Button(L("Hidden Files…", "隐藏文件…")) {
+                .controlSize(.small)
+                Button(L("Hidden Files…", "隐藏规则…")) {
                     AppContainer.shared.windowCoordinator.openHiddenFiles(repoPath: repoPath)
                 }
+                .controlSize(.small)
                 Button {
                     Task { await reload() }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    if isLoading {
+                        ProgressView().controlSize(.small)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
+                .controlSize(.small)
                 .help(L("Refresh", "刷新"))
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.vertical, 9)
+            .background(Color(nsColor: .windowBackgroundColor))
 
             Divider()
 
-            // Message Area
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(L("Message:", "提交信息："))
-                        .font(.subheadline.weight(.medium))
-                    Spacer()
-                    Menu(L("Recent Messages", "最近信息")) {
-                        if recentMessages.isEmpty {
-                            Text(L("None", "无"))
-                        } else {
-                            ForEach(recentMessages, id: \.self) { msg in
-                                Button(msg.prefix(60) + (msg.count > 60 ? "…" : "")) {
-                                    message = msg
-                                }
-                            }
-                        }
-                    }
-                    .frame(width: 150)
-                }
-
-                TextEditor(text: $message)
-                    .font(.system(.body))
-                    .frame(height: 96)
-                    .border(Color.secondary.opacity(0.25))
-
-                HStack(spacing: 16) {
-                    Toggle(L("Amend last commit", "修订上一个提交"), isOn: $amend)
-                        .onChange(of: amend) { isAmend in
-                            if isAmend && message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                loadLastCommitMessage()
-                            }
-                        }
-                    Toggle(L("Allow empty commit", "允许空的提交"), isOn: $allowEmpty)
-                    Spacer()
-                }
-                .font(.subheadline)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
-            Divider()
-
-            // Changes Filter Bar
-            HStack(spacing: 10) {
-                Toggle(L("Select / Deselect All", "全选 / 全不选"), isOn: Binding(
-                    get: {
-                        let visible = Set(filteredItems.map { $0.relativePath })
-                        return !visible.isEmpty && visible.isSubset(of: selectedPaths)
-                    },
-                    set: { selectAll in
-                        let visible = filteredItems.map { $0.relativePath }
-                        if selectAll {
-                            selectedPaths.formUnion(visible)
-                        } else {
-                            selectedPaths.subtract(visible)
-                        }
-                    }
-                ))
-                Toggle(L("Show untracked files", "显示未跟踪文件"), isOn: $showUntracked)
-
-                Picker(L("Changelist:", "变更列表："), selection: $selectedChangelistID) {
-                    Text(L("All Changes", "全部改动")).tag(UUID?.none)
-                    ForEach(changelists) { cl in
-                        Text("\(cl.name) (\(cl.files.count))").tag(UUID?.some(cl.id))
-                    }
-                }
-                .frame(maxWidth: 200)
-
-                Spacer()
-
-                TextField(L("Filter paths…", "筛选路径…"), text: $filterText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 190)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-
-            // File List
-            if isLoading && items.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if filteredItems.isEmpty {
-                EmptyStateBox(systemImage: "checkmark.circle", title: L("No Changes to Commit", "没有待提交的改动"))
-            } else {
-                List {
-                    ForEach(filteredItems) { item in
-                        HStack(spacing: 8) {
-                            Toggle("", isOn: Binding(
-                                get: { selectedPaths.contains(item.relativePath) },
-                                set: { checked in
-                                    if checked {
-                                        selectedPaths.insert(item.relativePath)
-                                    } else {
-                                        selectedPaths.remove(item.relativePath)
+            VSplitView {
+                // Message Area
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(L("Message:", "提交信息："))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Menu(L("Recent Messages", "最近信息")) {
+                            if recentMessages.isEmpty {
+                                Text(L("None", "无"))
+                            } else {
+                                ForEach(recentMessages, id: \.self) { msg in
+                                    Button(msg.replacingOccurrences(of: "\n", with: " ").prefix(72) + (msg.count > 72 ? "…" : "")) {
+                                        message = msg
                                     }
                                 }
-                            ))
-                            .labelsHidden()
-
-                            StatusBadgeLabel(status: item.status)
-                                .frame(width: 84, alignment: .leading)
-
-                            Text(item.relativePath)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            if let add = item.additions, let del = item.deletions {
-                                Text("+\(add) -\(del)")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 75, alignment: .trailing)
                             }
-                            Text(URL(fileURLWithPath: item.relativePath).pathExtension)
+                        }
+                        .menuStyle(.borderedButton)
+                        .controlSize(.small)
+                        .fixedSize()
+                    }
+
+                    ZStack(alignment: .topLeading) {
+                        if message.isEmpty {
+                            Text(L("Enter commit message… (⌘↩ to commit)", "输入提交说明…（⌘↩ 提交）"))
+                                .font(.system(size: 13))
+                                .foregroundColor(Color(nsColor: .placeholderTextColor))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 7)
+                                .allowsHitTesting(false)
+                        }
+                        TextEditor(text: $message)
+                            .font(.system(size: 13))
+                            .scrollContentBackground(.hidden)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 4)
+                    }
+                    .frame(minHeight: 74, maxHeight: .infinity)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .cornerRadius(5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                    )
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(minHeight: 112, idealHeight: 136)
+
+                // Changes Pane
+                VStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(L("Changes made (double-click on file for diff):", "变更列表（双击文件进行对比，空格切换勾选）："))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Picker("", selection: $selectedChangelistID) {
+                            Text(L("All Changes", "全部改动")).tag(UUID?.none)
+                            ForEach(changelists) { cl in
+                                Text("\(cl.name) (\(cl.files.count))").tag(UUID?.some(cl.id))
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 170)
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "magnifyingglass")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                                .frame(width: 50, alignment: .trailing)
-                            if let size = item.fileSize {
-                                Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 70, alignment: .trailing)
+                            TextField(L("Filter paths…", "筛选路径…"), text: $filterText)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12))
+                            if !filterText.isEmpty {
+                                Button {
+                                    filterText = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            diffItem(item)
-                        }
-                        .contextMenu {
-                            fileContextMenu(for: item)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .frame(width: 190)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .cornerRadius(5)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                        )
+                    }
+
+                    // Native AppKit File Table
+                    Group {
+                        if isLoading && items.isEmpty {
+                            ProgressView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .border(Color(nsColor: .separatorColor), width: 1)
+                        } else if filteredItems.isEmpty {
+                            EmptyStateBox(systemImage: "checkmark.circle", title: L("No Changes to Commit", "没有待提交的改动"))
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .border(Color(nsColor: .separatorColor), width: 1)
+                        } else {
+                            CommitFilesTableView(
+                                rows: commitRows,
+                                checkedPaths: $selectedPaths,
+                                highlightedPaths: $highlightedPaths,
+                                detailColumnTitle: L("Changes", "变更"),
+                                vcsType: .git,
+                                changelists: changelists,
+                                onDoubleClick: { row in
+                                    openDiffOrFile(row)
+                                },
+                                onContextAction: handleContextAction
+                            )
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Table Footer Strip
+                    let visible = filteredItems
+                    let checkedVisibleCount = visible.filter { selectedPaths.contains($0.relativePath) }.count
+                    HStack(spacing: 14) {
+                        Toggle(L("Select / deselect all", "全选 / 全不选"), isOn: Binding(
+                            get: {
+                                let set = Set(visible.map(\.relativePath))
+                                return !set.isEmpty && set.isSubset(of: selectedPaths)
+                            },
+                            set: { selectAll in
+                                let set = visible.map(\.relativePath)
+                                if selectAll {
+                                    selectedPaths.formUnion(set)
+                                } else {
+                                    selectedPaths.subtract(set)
+                                }
+                            }
+                        ))
+
+                        Toggle(L("Show untracked files", "显示未跟踪文件"), isOn: $showUntracked)
+
+                        Spacer()
+
+                        if highlightedPaths.count > 1 {
+                            Text(String(format: L("%d highlighted", "已选中 %d 行"), highlightedPaths.count))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Text(String(format: L("%d selected, %d files total", "已勾选 %d 项，共 %d 个文件"), checkedVisibleCount, visible.count))
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                    .controlSize(.small)
                 }
-                .listStyle(.inset)
+                .padding(.horizontal, 14)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .frame(minHeight: 220)
             }
 
             Divider()
 
             // Footer
-            let commitDisabled = isSubmitting || (selectedPaths.isEmpty && !allowEmpty && !amend && repoState != .merging)
-            HStack {
-                Text(String(format: L("%d selected of %d files", "%d 个文件已选择，共 %d 个文件"), selectedPaths.count, filteredItems.count))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            let visibleCheckedCount = filteredItems.filter { selectedPaths.contains($0.relativePath) }.count
+            let commitDisabled = isSubmitting || (visibleCheckedCount == 0 && !allowEmpty && !amend && repoState != .merging)
+            HStack(spacing: 16) {
+                Toggle(L("Amend last commit", "修订上一个提交"), isOn: $amend)
+                    .onChange(of: amend) { isAmend in
+                        if isAmend && message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            loadLastCommitMessage()
+                        }
+                    }
+                Toggle(L("Allow empty commit", "允许空的提交"), isOn: $allowEmpty)
 
                 // Hidden keyboard shortcut triggers so Cmd+Return and Shift+Cmd+Return work cleanly with Menu split button
                 Group {
@@ -314,72 +385,74 @@ struct CommitWindowView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
         .task { await reload() }
     }
 
-    @ViewBuilder
-    private func fileContextMenu(for item: VcsStatusItem) -> some View {
-        Button(L("Diff with Base", "与 base 比较")) { diffItem(item) }
-        Button(L("Show Log", "显示日志")) {
-            AppContainer.shared.windowCoordinator.dispatch(action: .showLog, repoPath: repoPath, targetDir: repoPath, selectedPaths: [item.absolutePath])
-        }
-        Button(L("Blame…", "追溯…")) {
-            AppContainer.shared.windowCoordinator.dispatch(action: .blame, repoPath: repoPath, targetDir: repoPath, selectedPaths: [item.absolutePath])
-        }
-        Divider()
-        if item.status == .untracked {
-            Button(L("Add", "添加")) {
-                Task {
-                    _ = try? await AppContainer.shared.gitProvider.add(repoPath: repoPath, paths: [item.absolutePath])
-                    await reload()
-                }
-            }
-        }
-        Button(L("Revert…", "复原…")) {
-            if AlertHelper.confirm(title: L("Revert File", "复原文件"), message: item.relativePath) {
-                Task {
-                    _ = try? await AppContainer.shared.gitProvider.revert(repoPath: repoPath, paths: [item.absolutePath])
-                    await reload()
-                }
-            }
-        }
-        Button(L("Add to Ignore List…", "添加到忽略清单…")) {
-            AppContainer.shared.windowCoordinator.dispatch(action: .addToIgnore, repoPath: repoPath, targetDir: repoPath, selectedPaths: [item.absolutePath])
-        }
-        Button(L("Hide Selected File", "隐藏所选文件")) {
-            _ = try? AppContainer.shared.hiddenFilesStore.addRules([item.relativePath], for: repoPath)
-            hiddenRules = AppContainer.shared.hiddenFilesStore.loadRules(for: repoPath)
-        }
-        Menu(L("Move to Changelist", "移动到变更列表")) {
-            Button(L("No Changelist", "无变更列表")) {
-                changelists = (try? AppContainer.shared.changelistStore.moveFiles([item.relativePath], toChangelistID: nil, for: repoPath)) ?? changelists
-            }
-            ForEach(changelists) { cl in
-                Button(cl.name) {
-                    changelists = (try? AppContainer.shared.changelistStore.moveFiles([item.relativePath], toChangelistID: cl.id, for: repoPath)) ?? changelists
-                }
-            }
-        }
-        Divider()
-        Button(L("Open", "打开")) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: item.absolutePath))
-        }
-        Button(L("Reveal in Finder", "在访达中显示")) {
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.absolutePath)])
-        }
-    }
-
-    private func diffItem(_ item: VcsStatusItem) {
-        if item.status == .untracked {
-            NSWorkspace.shared.open(URL(fileURLWithPath: item.absolutePath))
+    private func openDiffOrFile(_ row: CommitFileRow) {
+        if row.status == .untracked {
+            NSWorkspace.shared.open(URL(fileURLWithPath: row.absolutePath))
         } else {
             AppContainer.shared.windowCoordinator.openDiffWithRevision(
                 repoPath: repoPath,
-                filePath: item.absolutePath,
+                filePath: row.absolutePath,
                 revision: "HEAD",
                 rightTitle: L("Working Tree", "工作区")
             )
+        }
+    }
+
+    private func handleContextAction(_ action: CommitFileContextAction) {
+        switch action {
+        case .diff(let row):
+            openDiffOrFile(row)
+        case .diffPrevious(let row):
+            AppContainer.shared.windowCoordinator.openDiffPreviousVersion(repoPath: repoPath, filePath: row.absolutePath)
+        case .showLog(let row):
+            AppContainer.shared.windowCoordinator.dispatch(action: .showLog, repoPath: repoPath, targetDir: repoPath, selectedPaths: [row.absolutePath])
+        case .blame(let row):
+            AppContainer.shared.windowCoordinator.dispatch(action: .blame, repoPath: repoPath, targetDir: repoPath, selectedPaths: [row.absolutePath])
+        case .add(let rows):
+            let targets = rows.map(\.absolutePath)
+            Task {
+                _ = try? await AppContainer.shared.gitProvider.add(repoPath: repoPath, paths: targets)
+                await reload()
+            }
+        case .revert(let rows):
+            let targets = rows.map(\.absolutePath)
+            guard !targets.isEmpty, AlertHelper.confirm(
+                title: L("Revert File", "复原文件"),
+                message: rows.count == 1 ? rows[0].relativePath : String(format: L("Revert %d selected items?", "确定要复原所选 %d 项吗？"), rows.count)
+            ) else { return }
+            Task {
+                _ = try? await AppContainer.shared.gitProvider.revert(repoPath: repoPath, paths: targets)
+                await reload()
+            }
+        case .delete(let rows):
+            let targets = rows.map(\.absolutePath)
+            guard !targets.isEmpty, AlertHelper.confirm(
+                title: L("Delete Files", "删除文件"),
+                message: rows.count == 1 ? rows[0].relativePath : String(format: L("Remove %d selected files from Git and disk?", "确定从 Git 和工作区删除所选 %d 个文件吗？"), rows.count)
+            ) else { return }
+            Task {
+                _ = try? await AppContainer.shared.gitProvider.remove(repoPath: repoPath, paths: targets, keepLocal: false)
+                await reload()
+            }
+        case .addToIgnore(let rows):
+            AppContainer.shared.windowCoordinator.dispatch(action: .addToIgnore, repoPath: repoPath, targetDir: repoPath, selectedPaths: rows.map(\.absolutePath))
+        case .hideFiles(let rows):
+            _ = try? AppContainer.shared.hiddenFilesStore.addRules(rows.map(\.relativePath), for: repoPath)
+            hiddenRules = AppContainer.shared.hiddenFilesStore.loadRules(for: repoPath)
+        case .moveToChangelist(let rows, let clID):
+            changelists = (try? AppContainer.shared.changelistStore.moveFiles(rows.map(\.relativePath), toChangelistID: clID, for: repoPath)) ?? changelists
+        case .openFile(let row):
+            NSWorkspace.shared.open(URL(fileURLWithPath: row.absolutePath))
+        case .revealInFinder(let rows):
+            NSWorkspace.shared.activateFileViewerSelecting(rows.map { URL(fileURLWithPath: $0.absolutePath) })
+        case .copyPaths(let rows):
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(rows.map(\.relativePath).joined(separator: "\n"), forType: .string)
         }
     }
 
@@ -405,13 +478,15 @@ struct CommitWindowView: View {
             items = res.items
 
             if selectedPaths.isEmpty {
-                let preSet = preselectedPaths.compactMap { PathUtils.relativePath(of: $0, inside: repoPath) }
-                if !preSet.isEmpty && !preSet.contains("") {
-                    selectedPaths = Set(items.filter { item in
-                        preSet.contains(where: { item.relativePath == $0 || item.relativePath.hasPrefix($0 + "/") })
-                    }.map { $0.relativePath })
+                let normRepo = PathUtils.normalize(repoPath)
+                let preSet = Set(preselectedPaths.map { PathUtils.normalize($0) })
+                if preSet.isEmpty || preSet.contains(normRepo) {
+                    selectedPaths = Set(items.filter { $0.status != .untracked }.map(\.relativePath))
                 } else {
-                    selectedPaths = Set(items.filter { $0.status != .untracked }.map { $0.relativePath })
+                    selectedPaths = Set(items.filter { item in
+                        preSet.contains(item.absolutePath)
+                        || (item.status != .untracked && preSet.contains { PathUtils.isPath(item.absolutePath, insideOrEqualTo: $0) })
+                    }.map(\.relativePath))
                 }
             }
         } catch {
@@ -443,7 +518,7 @@ struct CommitWindowView: View {
         }
 
         isSubmitting = true
-        let chosenAbsPaths = items
+        let chosenAbsPaths = filteredItems
             .filter { selectedPaths.contains($0.relativePath) }
             .map { $0.absolutePath }
         let isAmend = amend
