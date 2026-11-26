@@ -76,6 +76,8 @@ final class GitProviderIntegrationTests: XCTestCase {
 
         _ = try await provider.editNote(repoPath: repoA.path, commitHash: log1[0].hash, note: "QA verified")
         let logWithNote = try await provider.log(repoPath: repoA.path, query: VcsLogQuery(limit: 10))
+        XCTAssertEqual(logWithNote.count, 2)
+        XCTAssertEqual(logWithNote[0].hash, log1[0].hash)
         XCTAssertEqual(logWithNote[0].note, "QA verified")
 
         let blameLines = try await provider.blame(repoPath: repoA.path, path: "hello.txt", revision: "HEAD", ignoreWhitespace: false)
@@ -168,5 +170,53 @@ final class GitProviderIntegrationTests: XCTestCase {
         XCTAssertTrue(GitProvider.isLikelyTransientLocalNetworkError(stderr: "No route to host"))
         XCTAssertFalse(GitProvider.isLikelyTransientLocalNetworkError(stderr: "remote: Invalid username or password.\nfatal: Authentication failed"))
         XCTAssertFalse(GitProvider.isLikelyTransientLocalNetworkError(stderr: "! [rejected] master -> master (non-fast-forward)"))
+    }
+
+    func testLogExcludesNotesAndStashRefsEvenWithNewerTimestamps() async throws {
+        let repo = tempRoot.appendingPathComponent("notes-stash-repo", isDirectory: true)
+        _ = try await provider.initRepository(at: repo.path, bare: false)
+        try await configureUser(at: repo.path)
+
+        let file = repo.appendingPathComponent("note.txt")
+        try "v1\n".write(to: file, atomically: true, encoding: .utf8)
+        _ = try await provider.runGit(repoPath: repo.path, arguments: ["add", "note.txt"])
+        let commitEnv = [
+            "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+            "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z",
+        ]
+        _ = try await provider.runGit(
+            repoPath: repo.path,
+            arguments: ["commit", "-m", "Base commit"],
+            extraEnv: commitEnv
+        )
+        let headHash = try await provider.runGit(repoPath: repo.path, arguments: ["rev-parse", "HEAD"])
+            .stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let noteEnv = [
+            "GIT_AUTHOR_DATE": "2026-01-01T00:00:10Z",
+            "GIT_COMMITTER_DATE": "2026-01-01T00:00:10Z",
+        ]
+        _ = try await provider.runGit(
+            repoPath: repo.path,
+            arguments: ["notes", "add", "-f", "-m", "QA verified", headHash],
+            extraEnv: noteEnv
+        )
+
+        try "v2\n".write(to: file, atomically: true, encoding: .utf8)
+        let stashEnv = [
+            "GIT_AUTHOR_DATE": "2026-01-01T00:00:20Z",
+            "GIT_COMMITTER_DATE": "2026-01-01T00:00:20Z",
+        ]
+        _ = try await provider.runGit(
+            repoPath: repo.path,
+            arguments: ["stash", "push", "-m", "wip stash"],
+            extraEnv: stashEnv
+        )
+
+        let logs = try await provider.log(repoPath: repo.path, query: VcsLogQuery(limit: 10))
+        XCTAssertEqual(logs.count, 1)
+        XCTAssertEqual(logs[0].hash, headHash)
+        XCTAssertEqual(logs[0].subject, "Base commit")
+        XCTAssertEqual(logs[0].note, "QA verified")
     }
 }

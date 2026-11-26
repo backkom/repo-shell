@@ -518,7 +518,8 @@ public final class GitProvider: VcsProvider, @unchecked Sendable {
         if let range = query.revisionRange, !range.isEmpty {
             args.append(range)
         } else {
-            args.append("--all")
+            // Exclude internal notes and stash refs so note/stash commits do not pollute log history.
+            args.append(contentsOf: ["--exclude=refs/notes/*", "--exclude=refs/stash", "--all"])
         }
         if let pathFilter = query.pathFilter, !pathFilter.isEmpty {
             let rel = PathUtils.relativePath(of: pathFilter, inside: repoPath) ?? pathFilter
