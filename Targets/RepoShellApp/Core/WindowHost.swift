@@ -265,4 +265,11 @@ enum AlertHelper {
         panel.allowsMultipleSelection = false
         return panel.runModal() == .OK ? panel.url : nil
     }
+
+    static func saveFile(title: String, defaultName: String) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = title
+        panel.nameFieldStringValue = defaultName
+        return panel.runModal() == .OK ? panel.url : nil
+    }
 }

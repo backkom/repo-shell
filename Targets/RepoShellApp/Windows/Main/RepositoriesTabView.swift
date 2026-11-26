@@ -2,8 +2,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 import RepoShellShared
 
+enum RepoVcsSubtab: String, CaseIterable {
+    case git
+    case svn
+}
+
 struct RepositoriesTabView: View {
     @ObservedObject private var repoManager = AppContainer.shared.repositoryManager
+    @State private var selectedVcsTab: RepoVcsSubtab = .git
     @State private var selectedRepoID: UUID?
     @State private var showAddMenu = false
     @State private var showWorkspacePanel = false
@@ -11,21 +17,41 @@ struct RepositoriesTabView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Picker("", selection: $selectedVcsTab) {
+                Label("Git (\(gitRepositories.count))", systemImage: "arrow.triangle.branch")
+                    .tag(RepoVcsSubtab.git)
+                Label("SVN (\(svnRepositories.count))", systemImage: "server.rack")
+                    .tag(RepoVcsSubtab.svn)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .onChange(of: selectedVcsTab) { _ in
+                selectedRepoID = nil
+            }
+
+            Divider()
+
             // Monitored Repositories List
             List(selection: $selectedRepoID) {
                 Section(header: HStack {
-                    Text(L("Monitored Repositories", "已监控版本库"))
+                    Text(selectedVcsTab == .git
+                         ? L("Git Repositories", "Git 版本库")
+                         : L("SVN Working Copies", "SVN 工作副本"))
                     Spacer()
-                    Text("\(repoManager.config.repositories.count)")
+                    Text("\(filteredRepositories.count)")
                         .foregroundColor(.secondary)
                         .font(.caption)
                 }) {
-                    if repoManager.config.repositories.isEmpty {
-                        Text(L("Drop Git repositories here or click + below to add.", "可将 Git 版本库拖放到此处，或点击下方 + 按钮添加。"))
+                    if filteredRepositories.isEmpty {
+                        Text(selectedVcsTab == .git
+                             ? L("Drop Git repositories here or click + below to add.", "可将 Git 版本库拖放到此处，或点击下方 + 按钮添加。")
+                             : L("Drop SVN working copies here or click + below to add or checkout.", "可将 SVN 工作副本拖放到此处，或点击下方 + 按钮添加或签出。"))
                             .foregroundColor(.secondary)
                             .padding(.vertical, 16)
                     } else {
-                        ForEach(repoManager.config.repositories) { repo in
+                        ForEach(filteredRepositories) { repo in
                             RepositoryRowView(repo: repo)
                                 .tag(repo.id)
                                 .contextMenu {
@@ -120,11 +146,13 @@ struct RepositoriesTabView: View {
             // Bottom Action Bar
             HStack(spacing: 8) {
                 Menu {
-                    Button(L("Add Existing Git Repository…", "添加现有 Git 版本库…")) {
-                        if let url = AlertHelper.pickFolder(title: L("Select Git Repository", "选择 Git 版本库")) {
+                    Button(L("Add Existing Git / SVN Repository…", "添加现有 Git / SVN 版本库…")) {
+                        if let url = AlertHelper.pickFolder(title: L("Select Git or SVN Repository", "选择 Git 或 SVN 版本库")) {
                             Task {
                                 do {
                                     let entry = try await repoManager.addRepository(at: url.path)
+                                    selectedVcsTab = (entry.vcsType == .svn ? .svn : .git)
+                                    selectedRepoID = entry.id
                                     AppContainer.shared.triggerRefresh(repoPath: entry.path)
                                 } catch {
                                     AlertHelper.showError(error)
@@ -146,6 +174,21 @@ struct RepositoriesTabView: View {
                     Button(L("Create New Git Repository…", "创建新的 Git 版本库…")) {
                         if let url = AlertHelper.pickFolder(title: L("Choose Folder for New Repository", "选择新建版本库目录")) {
                             AppContainer.shared.windowCoordinator.dispatch(action: .gitInit, repoPath: nil, targetDir: url.path, selectedPaths: [url.path])
+                        }
+                    }
+                    Divider()
+                    Button(L("SVN Checkout…", "SVN 签出…")) {
+                        let home = FileManager.default.homeDirectoryForCurrentUser.path
+                        AppContainer.shared.windowCoordinator.dispatch(action: .svnCheckout, repoPath: nil, targetDir: home, selectedPaths: [])
+                    }
+                    Button(L("Create New SVN Repository…", "创建新的 SVN 版本库…")) {
+                        if let url = AlertHelper.pickFolder(title: L("Choose Folder for New SVN Repository", "选择新建 SVN 版本库目录")) {
+                            AppContainer.shared.windowCoordinator.dispatch(action: .svnCreateRepo, repoPath: nil, targetDir: url.path, selectedPaths: [url.path])
+                        }
+                    }
+                    Button(L("SVN Import…", "SVN 导入…")) {
+                        if let url = AlertHelper.pickFolder(title: L("Select Folder to Import to SVN", "选择要导入到 SVN 的目录")) {
+                            AppContainer.shared.windowCoordinator.dispatch(action: .svnImport, repoPath: nil, targetDir: url.path, selectedPaths: [url.path])
                         }
                     }
                 } label: {
@@ -182,8 +225,17 @@ struct RepositoriesTabView: View {
                 Spacer()
 
                 if let repo = selectedRepo {
-                    Button(L("Commit…", "提交…")) {
-                        openAction(.gitCommit, repo: repo)
+                    if repo.vcsType == .svn {
+                        Button(L("Update…", "更新…")) {
+                            openAction(.svnUpdate, repo: repo)
+                        }
+                        Button(L("Commit…", "提交…")) {
+                            openAction(.svnCommit, repo: repo)
+                        }
+                    } else {
+                        Button(L("Commit…", "提交…")) {
+                            openAction(.gitCommit, repo: repo)
+                        }
                     }
                     Button(L("Show Log", "显示日志")) {
                         openAction(.showLog, repo: repo)
@@ -198,8 +250,20 @@ struct RepositoriesTabView: View {
         }
     }
 
+    private var gitRepositories: [RepositoryEntry] {
+        repoManager.config.repositories.filter { $0.vcsType == .git }
+    }
+
+    private var svnRepositories: [RepositoryEntry] {
+        repoManager.config.repositories.filter { $0.vcsType == .svn }
+    }
+
+    private var filteredRepositories: [RepositoryEntry] {
+        selectedVcsTab == .git ? gitRepositories : svnRepositories
+    }
+
     private var selectedRepo: RepositoryEntry? {
-        repoManager.config.repositories.first { $0.id == selectedRepoID }
+        filteredRepositories.first { $0.id == selectedRepoID }
     }
 
     private func openAction(_ action: MenuAction, repo: RepositoryEntry) {
@@ -213,39 +277,83 @@ struct RepositoriesTabView: View {
 
     @ViewBuilder
     private func repoContextMenu(for repo: RepositoryEntry) -> some View {
-        Button(L("Git Commit…", "Git 提交…")) { openAction(.gitCommit, repo: repo) }
-        Button(L("Git Pull…", "Git 拉取…")) { openAction(.gitPull, repo: repo) }
-        Button(L("Git Fetch…", "Git 获取…")) { openAction(.gitFetch, repo: repo) }
-        Button(L("Git Push…", "Git 推送…")) { openAction(.gitPush, repo: repo) }
-        Divider()
-        Button(L("Show Log", "显示日志")) { openAction(.showLog, repo: repo) }
-        Button(L("Check for Modifications", "检测改动")) { openAction(.checkForModifications, repo: repo) }
-        Button(L("Repo-browser", "版本库浏览器")) { openAction(.repoBrowser, repo: repo) }
-        Button(L("Browse References", "浏览引用")) { openAction(.browseReferences, repo: repo) }
-        Button(L("Show RefLog", "显示操作日志 (RefLog)")) { openAction(.showRefLog, repo: repo) }
-        Divider()
-        Button(L("Checkout / Switch…", "签出 / 切换…")) { openAction(.checkout, repo: repo) }
-        Button(L("Stash Save…", "储藏…")) { openAction(.stashPush, repo: repo) }
-        Button(L("Stash List", "储藏列表")) { openAction(.stashList, repo: repo) }
-        Button(L("Manage Submodules…", "管理子模块…")) { openAction(.submoduleManage, repo: repo) }
-        Button(L("Revert…", "复原…")) { openAction(.revert, repo: repo) }
-        Divider()
-        Button(L("Repo Info", "版本库信息")) { openAction(.repoInfo, repo: repo) }
-        Button(L("Configure Authentication…", "配置身份验证…")) {
-            AppContainer.shared.windowCoordinator.openAuthConfig(for: repo.path)
-        }
-        Button(L("Cleanup (git gc)", "清理 (git gc)")) { openAction(.cleanup, repo: repo) }
-        Divider()
-        Button(L("Reveal in Finder", "在访达中显示")) {
-            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repo.path)
-        }
-        Button(L("Copy Path", "拷贝路径")) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(repo.path, forType: .string)
-        }
-        Divider()
-        Button(L("Remove", "移除")) {
-            repoManager.removeRepository(id: repo.id)
+        if repo.vcsType == .svn {
+            Button(L("SVN Update…", "SVN 更新…")) { openAction(.svnUpdate, repo: repo) }
+            Button(L("Update to Revision…", "更新至指定版本…")) { openAction(.svnUpdateToRevision, repo: repo) }
+            Button(L("SVN Commit…", "SVN 提交…")) { openAction(.svnCommit, repo: repo) }
+            Divider()
+            Button(L("Show Log", "显示日志")) { openAction(.showLog, repo: repo) }
+            Button(L("Check for Modifications", "检测改动")) { openAction(.checkForModifications, repo: repo) }
+            Button(L("Repo-browser", "版本库浏览器")) { openAction(.repoBrowser, repo: repo) }
+            Divider()
+            Button(L("Branch / Tag…", "分支 / 标签…")) { openAction(.svnBranchTag, repo: repo) }
+            Button(L("Switch…", "切换 (Switch)…")) { openAction(.svnSwitch, repo: repo) }
+            Button(L("SVN Merge…", "SVN 合并…")) { openAction(.svnMerge, repo: repo) }
+            Button(L("Compare Revisions…", "比较版本…")) { openAction(.compareRevisions, repo: repo) }
+            Button(L("Export…", "导出…")) { openAction(.export, repo: repo) }
+            Divider()
+            Button(L("Get Lock…", "获取锁…")) { openAction(.svnLock, repo: repo) }
+            Button(L("Release Lock…", "释放锁…")) { openAction(.svnUnlock, repo: repo) }
+            Button(L("Properties…", "属性…")) { openAction(.svnProperties, repo: repo) }
+            Button(L("Revert…", "复原…")) { openAction(.revert, repo: repo) }
+            Divider()
+            Button(L("Create Patch…", "创建补丁…")) { openAction(.svnCreatePatch, repo: repo) }
+            Button(L("Apply Patch…", "应用补丁…")) { openAction(.svnApplyPatch, repo: repo) }
+            Button(L("Relocate…", "重定位…")) { openAction(.svnRelocate, repo: repo) }
+            Divider()
+            Button(L("SVN Info", "SVN 信息")) { openAction(.svnInfo, repo: repo) }
+            Button(L("Configure Authentication…", "配置身份验证…")) {
+                AppContainer.shared.windowCoordinator.openAuthConfig(for: repo.path)
+            }
+            Button(L("Clean up…", "清理 (Clean up)…")) { openAction(.svnCleanup, repo: repo) }
+            Button(L("Upgrade Working Copy…", "升级工作副本…")) { openAction(.svnUpgrade, repo: repo) }
+            Divider()
+            Button(L("Reveal in Finder", "在访达中显示")) {
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repo.path)
+            }
+            Button(L("Copy Path", "拷贝路径")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(repo.path, forType: .string)
+            }
+            Divider()
+            Button(L("Remove", "移除")) {
+                repoManager.removeRepository(id: repo.id)
+            }
+        } else {
+            Button(L("Git Commit…", "Git 提交…")) { openAction(.gitCommit, repo: repo) }
+            Button(L("Git Pull…", "Git 拉取…")) { openAction(.gitPull, repo: repo) }
+            Button(L("Git Fetch…", "Git 获取…")) { openAction(.gitFetch, repo: repo) }
+            Button(L("Git Push…", "Git 推送…")) { openAction(.gitPush, repo: repo) }
+            Divider()
+            Button(L("Show Log", "显示日志")) { openAction(.showLog, repo: repo) }
+            Button(L("Check for Modifications", "检测改动")) { openAction(.checkForModifications, repo: repo) }
+            Button(L("Repo-browser", "版本库浏览器")) { openAction(.repoBrowser, repo: repo) }
+            Button(L("Browse References", "浏览引用")) { openAction(.browseReferences, repo: repo) }
+            Button(L("Show RefLog", "显示操作日志 (RefLog)")) { openAction(.showRefLog, repo: repo) }
+            Divider()
+            Button(L("Checkout / Switch…", "签出 / 切换…")) { openAction(.checkout, repo: repo) }
+            Button(L("Stash Save…", "储藏…")) { openAction(.stashPush, repo: repo) }
+            Button(L("Stash List", "储藏列表")) { openAction(.stashList, repo: repo) }
+            Button(L("Manage Submodules…", "管理子模块…")) { openAction(.submoduleManage, repo: repo) }
+            Button(L("Revert…", "复原…")) { openAction(.revert, repo: repo) }
+            Divider()
+            Button(L("Repo Info", "版本库信息")) { openAction(.repoInfo, repo: repo) }
+            Button(L("Configure Authentication…", "配置身份验证…")) {
+                AppContainer.shared.windowCoordinator.openAuthConfig(for: repo.path)
+            }
+            Button(L("Cleanup (git gc)", "清理 (git gc)")) { openAction(.cleanup, repo: repo) }
+            Divider()
+            Button(L("Reveal in Finder", "在访达中显示")) {
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repo.path)
+            }
+            Button(L("Copy Path", "拷贝路径")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(repo.path, forType: .string)
+            }
+            Divider()
+            Button(L("Remove", "移除")) {
+                repoManager.removeRepository(id: repo.id)
+            }
         }
     }
 
@@ -259,6 +367,8 @@ struct RepositoriesTabView: View {
                           let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
                     Task { @MainActor in
                         if let entry = try? await repoManager.addRepository(at: url.path) {
+                            selectedVcsTab = (entry.vcsType == .svn ? .svn : .git)
+                            selectedRepoID = entry.id
                             AppContainer.shared.triggerRefresh(repoPath: entry.path)
                         }
                     }

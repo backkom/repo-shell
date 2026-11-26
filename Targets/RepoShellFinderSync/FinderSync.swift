@@ -129,12 +129,14 @@ final class FinderSync: FIFinderSync {
         }
 
         var containsGit = false
+        var containsSvn = false
         if matchedRepo == nil {
             let checkDir = selectedPaths.count == 1 ? selectedPaths[0] : targetDirPath
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: checkDir, isDirectory: &isDir), isDir.boolValue {
-                let dotGit = URL(fileURLWithPath: checkDir).appendingPathComponent(".git")
-                containsGit = FileManager.default.fileExists(atPath: dotGit.path)
+                let dirURL = URL(fileURLWithPath: checkDir)
+                containsGit = FileManager.default.fileExists(atPath: dirURL.appendingPathComponent(".git").path)
+                containsSvn = FileManager.default.fileExists(atPath: dirURL.appendingPathComponent(".svn").path)
             }
         }
 
@@ -145,7 +147,8 @@ final class FinderSync: FIFinderSync {
             snapshot: snapshot,
             diffLaterState: diffLater,
             directoryContainsGitFolder: containsGit,
-            isDirectoryCleanRepoCandidate: !containsGit,
+            directoryContainsSvnFolder: containsSvn,
+            isDirectoryCleanRepoCandidate: !containsGit && !containsSvn,
             language: cfg.preferences.language
         )
 
@@ -155,10 +158,19 @@ final class FinderSync: FIFinderSync {
 
         // Cascade in context menus when configured; keep toolbar dropdown flat
         let shouldCascade = !isToolbar && cfg.preferences.cascadeMenu
+        let topActions: [MenuAction]
+        if isToolbar {
+            topActions = []
+        } else if matchedRepo?.vcsType == .svn {
+            topActions = cfg.preferences.svnTopLevelMenuActions
+        } else {
+            topActions = cfg.preferences.topLevelMenuActions
+        }
+
         let built = MenuBuilder.buildMenu(
             resolvedItems: resolved,
             cascade: shouldCascade,
-            topLevelActions: isToolbar ? [] : cfg.preferences.topLevelMenuActions,
+            topLevelActions: topActions,
             showIcons: cfg.preferences.showMenuIcons,
             targetDirectoryPath: targetDirPath,
             selectedPaths: selectedPaths,

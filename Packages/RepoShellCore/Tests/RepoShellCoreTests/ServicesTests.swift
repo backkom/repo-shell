@@ -207,5 +207,64 @@ final class ServicesTests: XCTestCase {
         XCTAssertEqual(decoded.preferences.diffToolId, "bcomp")
         XCTAssertTrue(decoded.preferences.hasCompletedSetupWizard)
         XCTAssertEqual(decoded.preferences.topLevelMenuActions, AppPreferences.defaultTopLevelMenuActions)
+        XCTAssertEqual(decoded.preferences.useBundledSvn, false)
+        XCTAssertEqual(decoded.preferences.externalSvnPath, "")
+        XCTAssertEqual(decoded.preferences.svnLogLimit, 100)
+        XCTAssertEqual(decoded.preferences.svnDeleteForce, false)
+        XCTAssertEqual(decoded.preferences.svnTopLevelMenuActions, AppPreferences.defaultSvnTopLevelMenuActions)
+
+        let legacyHistoryJSON = #"{"commitMessages":["msg1"],"remoteURLs":["https://example.com"]}"#
+        let decodedHistory = try JSONDecoder().decode(RecentHistoryData.self, from: XCTUnwrap(legacyHistoryJSON.data(using: .utf8)))
+        XCTAssertEqual(decodedHistory.commitMessages, ["msg1"])
+        XCTAssertEqual(decodedHistory.svnCommitMessages, [])
+        XCTAssertEqual(decodedHistory.svnRepoURLs, [])
+    }
+
+    func testSvnAuthEnvironmentSslTrustAndQuickActions() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let bundleURL = dir.appendingPathComponent("TestApp.bundle", isDirectory: true)
+        let contentsDir = bundleURL.appendingPathComponent("Contents", isDirectory: true)
+        let helpersDir = contentsDir.appendingPathComponent("Helpers", isDirectory: true)
+        try FileManager.default.createDirectory(at: helpersDir, withIntermediateDirectories: true)
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.leaf.reposhell.test</string></dict></plist>
+        """
+        try plist.write(to: contentsDir.appendingPathComponent("Info.plist"), atomically: true, encoding: .utf8)
+        let fakeAskpassURL = helpersDir.appendingPathComponent(AppConstants.askpassHelperName)
+        try "#!/bin/sh\nexit 0\n".write(to: fakeAskpassURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeAskpassURL.path)
+
+        let storage = SharedStorage(baseDirectoryURL: dir.appendingPathComponent("storage", isDirectory: true))
+        var cfg = SharedConfig()
+        let sshRepo = RepositoryEntry(
+            path: "/tmp/svn-ssh",
+            vcsType: .svn,
+            authConfig: RepoAuthConfig(mode: .sshKey, sshKeyPath: "/Users/test/.ssh/id_ed25519", sshPort: 2222)
+        )
+        cfg.repositories = [sshRepo]
+        try storage.saveConfig(cfg)
+
+        let auth = AuthManager(storage: storage, bundle: try XCTUnwrap(Bundle(url: bundleURL)))
+        let svnEnv = auth.svnEnvironment(for: sshRepo.path)
+        XCTAssertEqual(svnEnv["SSH_ASKPASS"], fakeAskpassURL.path)
+        XCTAssertTrue(svnEnv["SVN_SSH"]?.contains("id_ed25519") == true)
+        XCTAssertTrue(svnEnv["SVN_SSH"]?.contains("-p 2222") == true)
+
+        auth.trustSvnHostPermanently("svn.local")
+        let overrides = auth.svnAuthOverrides(for: nil, targetURL: "https://svn.local/repos/app")
+        XCTAssertFalse(overrides.trustServerCertFailures.isEmpty)
+
+        let qaDir = dir.appendingPathComponent("services", isDirectory: true)
+        let qa = QuickActionManager(servicesDirectoryURL: qaDir, runnerScriptPath: "/tmp/runner.sh")
+        let updateWf = try qa.install(action: .svnUpdate, language: .en)
+        let propsWf = try qa.install(action: .svnProperties, language: .en)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: updateWf.appendingPathComponent("Contents/document.wflow").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: propsWf.appendingPathComponent("Contents/document.wflow").path))
+        try qa.uninstall(action: .svnUpdate, language: .en)
+        try qa.uninstall(action: .svnProperties, language: .en)
     }
 }

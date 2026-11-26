@@ -1,5 +1,6 @@
 import Foundation
 import RepoShellShared
+import RepoShellVcs
 
 public final class AuthManager: @unchecked Sendable {
     private let storage: SharedStorage
@@ -108,6 +109,105 @@ public final class AuthManager: @unchecked Sendable {
         }
 
         return env
+    }
+
+    private var svnTrustedHostsURL: URL {
+        storage.baseDirectoryURL.appendingPathComponent("svn-trusted-hosts.json", isDirectory: false)
+    }
+
+    public func trustedSvnHosts() -> Set<String> {
+        let hosts = storage.read([String].self, from: svnTrustedHostsURL) ?? []
+        return Set(hosts.map { $0.lowercased() })
+    }
+
+    public func trustSvnHostPermanently(_ host: String) {
+        let clean = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !clean.isEmpty else { return }
+        var hosts = trustedSvnHosts()
+        hosts.insert(clean)
+        try? storage.write(Array(hosts).sorted(), to: svnTrustedHostsURL)
+    }
+
+    public func saveSvnUrlCredentials(hostOrUrl: String, username: String, password: String) {
+        guard let host = extractHostKey(hostOrUrl) else { return }
+        let payload = "\(username)\n\(password)"
+        _ = KeychainStore.saveSecret(payload, service: "com.leaf.reposhell.svn", account: host)
+    }
+
+    public func readSvnUrlCredentials(hostOrUrl: String) -> (username: String, password: String)? {
+        guard let host = extractHostKey(hostOrUrl),
+              let raw = KeychainStore.readSecret(service: "com.leaf.reposhell.svn", account: host) else {
+            return nil
+        }
+        let parts = raw.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    private func extractHostKey(_ hostOrUrl: String) -> String? {
+        let trimmed = hostOrUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        if let url = URL(string: trimmed), let host = url.host, !host.isEmpty {
+            if let port = url.port {
+                return "\(host.lowercased()):\(port)"
+            }
+            return host.lowercased()
+        }
+        return trimmed.lowercased()
+    }
+
+    public func svnEnvironment(for repoPath: String?) -> [String: String] {
+        var env: [String: String] = [:]
+        let cfg = storage.loadConfig()
+        let normRepo = repoPath.map { PathUtils.normalize($0) }
+
+        if let norm = normRepo {
+            env["REPOSHELL_REPO_PATH"] = norm
+        }
+        env["REPOSHELL_SOCKET_PATH"] = storage.askpassSocketURL.path
+
+        if let askpassURL = helperURL(named: AppConstants.askpassHelperName) {
+            env["SSH_ASKPASS"] = askpassURL.path
+            env["SSH_ASKPASS_REQUIRE"] = "force"
+            env["DISPLAY"] = ":0"
+        }
+
+        if let norm = normRepo,
+           let repo = cfg.matchingRepository(for: norm),
+           repo.authConfig.mode == .sshKey,
+           !repo.authConfig.sshKeyPath.isEmpty {
+            let key = repo.authConfig.sshKeyPath.replacingOccurrences(of: "'", with: "'\\''")
+            let port = repo.authConfig.sshPort > 0 ? repo.authConfig.sshPort : 22
+            env["SVN_SSH"] = "ssh -i '\(key)' -p \(port) -o IdentitiesOnly=yes"
+        }
+
+        return env
+    }
+
+    public func svnAuthOverrides(for repoPath: String?, targetURL: String? = nil) -> SvnAuthOverrides {
+        var overrides = SvnAuthOverrides()
+        let cfg = storage.loadConfig()
+
+        if let repoPath, let repo = cfg.matchingRepository(for: repoPath),
+           repo.authConfig.mode == .userPassword {
+            if !repo.authConfig.username.isEmpty {
+                overrides.username = repo.authConfig.username
+            }
+            if let secret = readSavedSecret(repoPath: repo.path, mode: .userPassword), !secret.isEmpty {
+                overrides.password = secret
+            }
+        } else if let targetURL, let saved = readSvnUrlCredentials(hostOrUrl: targetURL) {
+            overrides.username = saved.username
+            overrides.password = saved.password
+        }
+
+        if let targetURL, let url = URL(string: targetURL), let host = url.host?.lowercased() {
+            if trustedSvnHosts().contains(host) {
+                overrides.trustServerCertFailures = SvnAuthOverrides.allCertFailures
+            }
+        }
+
+        return overrides
     }
 
     private func helperURL(named name: String) -> URL? {

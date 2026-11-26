@@ -773,6 +773,7 @@ final class TaskProgressModel: ObservableObject {
         return joined.contains("Couldn't connect to server")
             || joined.contains("No route to host")
             || joined.contains("Failed to connect to")
+            || SvnErrorClassifier.isTransientLocalNetworkError(joined)
     }
 
     func cancel() {

@@ -154,6 +154,12 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var hasCompletedSetupWizard: Bool
     public var cloudDriveIndicators: [String]
     public var topLevelMenuActions: [MenuAction]
+    public var useBundledSvn: Bool
+    public var externalSvnPath: String
+    public var svnDylibPath: String
+    public var svnLogLimit: Int
+    public var svnDeleteForce: Bool
+    public var svnTopLevelMenuActions: [MenuAction]
 
     public static let defaultTopLevelMenuActions: [MenuAction] = [
         .gitCommit,
@@ -176,6 +182,28 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         .checkout,
         .repoBrowser,
         .blame
+    ]
+
+    public static let defaultSvnTopLevelMenuActions: [MenuAction] = [
+        .svnUpdate,
+        .svnCommit,
+        .showLog,
+        .checkForModifications
+    ]
+
+    public static let promotableSvnMenuActions: [MenuAction] = [
+        .svnUpdate,
+        .svnUpdateToRevision,
+        .svnCommit,
+        .showLog,
+        .checkForModifications,
+        .diff,
+        .revert,
+        .svnCleanup,
+        .svnLock,
+        .svnUnlock,
+        .svnProperties,
+        .repoBrowser
     ]
 
     enum CodingKeys: String, CodingKey {
@@ -203,6 +231,12 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         case hasCompletedSetupWizard
         case cloudDriveIndicators
         case topLevelMenuActions
+        case useBundledSvn
+        case externalSvnPath
+        case svnDylibPath
+        case svnLogLimit
+        case svnDeleteForce
+        case svnTopLevelMenuActions
     }
 
     public init(
@@ -237,7 +271,13 @@ public struct AppPreferences: Codable, Equatable, Sendable {
             "SynologyDrive",
             "Box"
         ],
-        topLevelMenuActions: [MenuAction] = AppPreferences.defaultTopLevelMenuActions
+        topLevelMenuActions: [MenuAction] = AppPreferences.defaultTopLevelMenuActions,
+        useBundledSvn: Bool = false,
+        externalSvnPath: String = "",
+        svnDylibPath: String = "",
+        svnLogLimit: Int = 100,
+        svnDeleteForce: Bool = false,
+        svnTopLevelMenuActions: [MenuAction] = AppPreferences.defaultSvnTopLevelMenuActions
     ) {
         self.cascadeMenu = cascadeMenu
         self.showMenuIcons = showMenuIcons
@@ -263,6 +303,12 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         self.hasCompletedSetupWizard = hasCompletedSetupWizard
         self.cloudDriveIndicators = cloudDriveIndicators
         self.topLevelMenuActions = topLevelMenuActions
+        self.useBundledSvn = useBundledSvn
+        self.externalSvnPath = externalSvnPath
+        self.svnDylibPath = svnDylibPath
+        self.svnLogLimit = svnLogLimit
+        self.svnDeleteForce = svnDeleteForce
+        self.svnTopLevelMenuActions = svnTopLevelMenuActions
     }
 
     public init(from decoder: Decoder) throws {
@@ -292,6 +338,12 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         self.hasCompletedSetupWizard = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedSetupWizard) ?? defaults.hasCompletedSetupWizard
         self.cloudDriveIndicators = try c.decodeIfPresent([String].self, forKey: .cloudDriveIndicators) ?? defaults.cloudDriveIndicators
         self.topLevelMenuActions = try c.decodeIfPresent([MenuAction].self, forKey: .topLevelMenuActions) ?? Self.defaultTopLevelMenuActions
+        self.useBundledSvn = try c.decodeIfPresent(Bool.self, forKey: .useBundledSvn) ?? defaults.useBundledSvn
+        self.externalSvnPath = try c.decodeIfPresent(String.self, forKey: .externalSvnPath) ?? defaults.externalSvnPath
+        self.svnDylibPath = try c.decodeIfPresent(String.self, forKey: .svnDylibPath) ?? defaults.svnDylibPath
+        self.svnLogLimit = try c.decodeIfPresent(Int.self, forKey: .svnLogLimit) ?? defaults.svnLogLimit
+        self.svnDeleteForce = try c.decodeIfPresent(Bool.self, forKey: .svnDeleteForce) ?? defaults.svnDeleteForce
+        self.svnTopLevelMenuActions = try c.decodeIfPresent([MenuAction].self, forKey: .svnTopLevelMenuActions) ?? Self.defaultSvnTopLevelMenuActions
     }
 }
 
@@ -474,9 +526,33 @@ public struct Changelist: Codable, Identifiable, Equatable, Sendable {
 public struct RecentHistoryData: Codable, Equatable, Sendable {
     public var commitMessages: [String]
     public var remoteURLs: [String]
+    public var svnCommitMessages: [String]
+    public var svnRepoURLs: [String]
 
-    public init(commitMessages: [String] = [], remoteURLs: [String] = []) {
+    enum CodingKeys: String, CodingKey {
+        case commitMessages
+        case remoteURLs
+        case svnCommitMessages
+        case svnRepoURLs
+    }
+
+    public init(
+        commitMessages: [String] = [],
+        remoteURLs: [String] = [],
+        svnCommitMessages: [String] = [],
+        svnRepoURLs: [String] = []
+    ) {
         self.commitMessages = commitMessages
         self.remoteURLs = remoteURLs
+        self.svnCommitMessages = svnCommitMessages
+        self.svnRepoURLs = svnRepoURLs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.commitMessages = try c.decodeIfPresent([String].self, forKey: .commitMessages) ?? []
+        self.remoteURLs = try c.decodeIfPresent([String].self, forKey: .remoteURLs) ?? []
+        self.svnCommitMessages = try c.decodeIfPresent([String].self, forKey: .svnCommitMessages) ?? []
+        self.svnRepoURLs = try c.decodeIfPresent([String].self, forKey: .svnRepoURLs) ?? []
     }
 }

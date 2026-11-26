@@ -127,17 +127,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             for repo in repos {
                 let sub = NSMenu(title: repo.name)
-                let quickActions: [(MenuAction, String)] = [
-                    (.gitCommit, L("Commit…", "提交…")),
-                    (.gitPull, L("Pull…", "拉取…")),
-                    (.gitFetch, L("Fetch…", "获取…")),
-                    (.gitPush, L("Push…", "推送…")),
-                    (.showLog, L("Show Log", "显示日志")),
-                    (.checkForModifications, L("Check for Modifications", "检测改动")),
-                    (.repoBrowser, L("Repo-browser", "版本库浏览器")),
-                    (.browseReferences, L("Browse References", "浏览引用")),
-                    (.repoInfo, L("Repo Info", "版本库信息"))
-                ]
+                let quickActions: [(MenuAction, String)]
+                if repo.vcsType == .svn {
+                    quickActions = [
+                        (.svnUpdate, L("SVN Update…", "SVN 更新…")),
+                        (.svnCommit, L("SVN Commit…", "SVN 提交…")),
+                        (.showLog, L("Show Log", "显示日志")),
+                        (.checkForModifications, L("Check for Modifications", "检测改动")),
+                        (.repoBrowser, L("Repo-browser", "版本库浏览器")),
+                        (.svnCleanup, L("Clean up…", "清理 (Clean up)…")),
+                        (.svnInfo, L("SVN Info", "SVN 信息"))
+                    ]
+                } else {
+                    quickActions = [
+                        (.gitCommit, L("Commit…", "提交…")),
+                        (.gitPull, L("Pull…", "拉取…")),
+                        (.gitFetch, L("Fetch…", "获取…")),
+                        (.gitPush, L("Push…", "推送…")),
+                        (.showLog, L("Show Log", "显示日志")),
+                        (.checkForModifications, L("Check for Modifications", "检测改动")),
+                        (.repoBrowser, L("Repo-browser", "版本库浏览器")),
+                        (.browseReferences, L("Browse References", "浏览引用")),
+                        (.repoInfo, L("Repo Info", "版本库信息"))
+                    ]
+                }
                 for (act, title) in quickActions {
                     let mi = NSMenuItem(title: title, action: #selector(runRepoStatusAction(_:)), keyEquivalent: "")
                     mi.target = self
@@ -146,7 +159,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     sub.addItem(mi)
                 }
                 let parent = NSMenuItem(title: repo.name, action: nil, keyEquivalent: "")
-                parent.image = MenuActionIconRenderer.submenuIcon(symbolName: "folder.fill", color: RGBColor(r: 29, g: 124, b: 242))
+                parent.image = MenuActionIconRenderer.submenuIcon(
+                    symbolName: repo.vcsType == .svn ? "server.rack" : "folder.fill",
+                    color: RGBColor(r: 29, g: 124, b: 242)
+                )
                 parent.submenu = sub
                 menu.addItem(parent)
             }
@@ -202,6 +218,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         initItem.target = self
         fileMenu.addItem(initItem)
         fileMenu.addItem(.separator())
+        let svnCheckoutItem = NSMenuItem(title: L("SVN Checkout…", "SVN 签出…"), action: #selector(menuSvnCheckoutAction), keyEquivalent: "")
+        svnCheckoutItem.target = self
+        fileMenu.addItem(svnCheckoutItem)
+        let svnCreateItem = NSMenuItem(title: L("Create SVN Repository…", "创建 SVN 版本库…"), action: #selector(menuSvnCreateAction), keyEquivalent: "")
+        svnCreateItem.target = self
+        fileMenu.addItem(svnCreateItem)
+        fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: L("Close Window", "关闭窗口"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileMenuItem.submenu = fileMenu
 
@@ -242,6 +265,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuInitAction() {
         if let folder = AlertHelper.pickFolder(title: L("Choose folder to initialize Git repository", "选择要初始化 Git 版本库的文件夹")) {
             AppContainer.shared.windowCoordinator.dispatch(action: .gitInit, repoPath: nil, targetDir: folder.path, selectedPaths: [folder.path])
+        }
+    }
+
+    @objc private func menuSvnCheckoutAction() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        AppContainer.shared.windowCoordinator.dispatch(action: .svnCheckout, repoPath: nil, targetDir: home, selectedPaths: [])
+    }
+
+    @objc private func menuSvnCreateAction() {
+        if let folder = AlertHelper.pickFolder(title: L("Choose folder to create SVN repository", "选择要创建 SVN 版本库的文件夹")) {
+            AppContainer.shared.windowCoordinator.dispatch(action: .svnCreateRepo, repoPath: nil, targetDir: folder.path, selectedPaths: [folder.path])
         }
     }
 }

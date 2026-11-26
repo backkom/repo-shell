@@ -208,28 +208,6 @@ public final class QuickActionManager: Sendable {
     }
 
     private func menuKey(for action: MenuAction) -> String {
-        switch action {
-        case .gitCommit: return "menu.gitCommit"
-        case .gitPull: return "menu.gitPull"
-        case .gitFetch: return "menu.gitFetch"
-        case .gitPush: return "menu.gitPush"
-        case .showLog: return "menu.showLog"
-        case .checkForModifications: return "menu.checkModifications"
-        case .browseReferences: return "menu.browseReferences"
-        case .stashPush: return "menu.stashPush"
-        case .stashList: return "menu.stashList"
-        case .repoBrowser: return "menu.repoBrowser"
-        case .revert: return "menu.revert"
-        case .checkout: return "menu.checkout"
-        case .createBranch: return "menu.createBranch"
-        case .createTag: return "menu.createTag"
-        case .merge: return "menu.merge"
-        case .diff: return "menu.diff"
-        case .diffPrevious: return "menu.diffPrev"
-        case .add: return "menu.add"
-        case .blame: return "menu.blame"
-        case .repoInfo: return "menu.repoInfo"
-        default: return action.rawValue
-        }
+        action.localizationKey
     }
 }

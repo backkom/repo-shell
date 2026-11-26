@@ -7,6 +7,7 @@ public final class StatusEngine: @unchecked Sendable {
     private let storage: SharedStorage
     private let repositoryManager: RepositoryManager
     private let gitProvider: GitProvider
+    private let svnProvider: SvnProvider
     private let finderTagService: FinderTagService
 
     private let stateLock = NSLock()
@@ -23,11 +24,13 @@ public final class StatusEngine: @unchecked Sendable {
         storage: SharedStorage = .shared,
         repositoryManager: RepositoryManager,
         gitProvider: GitProvider? = nil,
+        svnProvider: SvnProvider? = nil,
         finderTagService: FinderTagService? = nil
     ) {
         self.storage = storage
         self.repositoryManager = repositoryManager
         self.gitProvider = gitProvider ?? GitProvider(preferencesProvider: { storage.loadConfig().preferences })
+        self.svnProvider = svnProvider ?? SvnProvider(preferencesProvider: { storage.loadConfig().preferences })
         self.finderTagService = finderTagService ?? FinderTagService(storage: storage)
     }
 
@@ -80,7 +83,7 @@ public final class StatusEngine: @unchecked Sendable {
 
     public func refreshAllRepositories() {
         let cfg = storage.loadConfig()
-        for repo in cfg.repositories where repo.vcsType == .git {
+        for repo in cfg.repositories {
             scheduleRefresh(forRepo: repo.path, delay: 0.05)
         }
     }
@@ -97,17 +100,29 @@ public final class StatusEngine: @unchecked Sendable {
             endRefresh(repoPath: norm)
         }
 
-        guard let statusRes = try? await gitProvider.status(
-            repoPath: norm,
-            options: VcsStatusOptions(includeIgnored: true, includeUntracked: true, includeLineStats: false)
-        ) else {
+        let matchedRepo = cfg.repositories.first(where: { PathUtils.normalize($0.path) == norm })
+            ?? cfg.matchingRepository(for: norm)
+        let vcsType: VcsType = matchedRepo?.vcsType
+            ?? (FileManager.default.fileExists(atPath: URL(fileURLWithPath: norm).appendingPathComponent(".svn").path) ? .svn : .git)
+
+        let options = VcsStatusOptions(includeIgnored: true, includeUntracked: true, includeLineStats: false)
+        let statusResult: VcsStatusResult?
+        switch vcsType {
+        case .svn:
+            // Local working copy scan only; never pass -u in background StatusEngine.
+            statusResult = try? await svnProvider.status(repoPath: norm, options: options)
+        case .git:
+            statusResult = try? await gitProvider.status(repoPath: norm, options: options)
+        }
+
+        guard let statusRes = statusResult else {
             return
         }
 
         let folderMap = GitParsers.buildFolderStatuses(from: statusRes.items)
         let snapshot = RepoStatusSnapshot(
             repoPath: norm,
-            vcsType: .git,
+            vcsType: vcsType,
             branchName: statusRes.branchName,
             repoState: statusRes.repoState,
             updatedAt: Date(),
@@ -226,8 +241,13 @@ public final class StatusEngine: @unchecked Sendable {
         var affectedRepos: Set<String> = []
 
         for rawPath in paths {
-            // Ignore transient index.lock and git object packing churn
-            if rawPath.hasSuffix(".git/index.lock") || rawPath.contains("/.git/objects/") {
+            // Ignore transient Git index.lock/object packing churn and SVN SQLite WAL/tmp churn
+            if rawPath.hasSuffix(".git/index.lock")
+                || rawPath.contains("/.git/objects/")
+                || rawPath.hasSuffix(".svn/wc.db-journal")
+                || rawPath.hasSuffix(".svn/wc.db-wal")
+                || rawPath.hasSuffix(".svn/wc.db-shm")
+                || rawPath.contains("/.svn/tmp/") {
                 continue
             }
             if let repo = cfg.matchingRepository(for: rawPath) {

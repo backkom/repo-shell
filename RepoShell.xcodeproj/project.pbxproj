@@ -33,6 +33,10 @@
 		94A6DD4EE952F25788102B8E /* QuickActionsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23DF4A95F91E0C261E5CB26; };
 		6CF1D0D7AEC4FEE661A80673 /* RepositoriesTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E19487D08B4B921C2FF3A7AF; };
 		FB96AB2F23BA113AE788F5FB /* SetupWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 650A5C0C5E68CCE017455615; };
+		E93F976A6751EF0DF47FB1DD /* SvnTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55DD9EEAD5C699C08325D623; };
+		DC7BD409D06F3318D95D587D /* SvnAdvancedWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC8C045424F3632FE4B677C; };
+		6DCC936C85156F4057957B54 /* SvnCoreWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8228CF75780821E4DEEF379C; };
+		4473A2F08580EA139A73FA62 /* SvnWorkingCopyDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0285AB3BD646CB06071C1EB5; };
 		8B3E816BF4F2E3D627769E72 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 6806396CD2A3EB5AEE60C56E; };
 		A7398271DC49B8DA054B676A /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B4F9001FEF5406956D64F3DB; };
 		34C0C68D48B3DD92D22172A1 /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12B7D808B2CD1CE7040CE38C; };
@@ -130,6 +134,10 @@
 		B23DF4A95F91E0C261E5CB26 /* QuickActionsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/QuickActionsTabView.swift"; sourceTree = "<group>"; };
 		E19487D08B4B921C2FF3A7AF /* RepositoriesTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/RepositoriesTabView.swift"; sourceTree = "<group>"; };
 		650A5C0C5E68CCE017455615 /* SetupWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/SetupWizardView.swift"; sourceTree = "<group>"; };
+		55DD9EEAD5C699C08325D623 /* SvnTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Main/SvnTabView.swift"; sourceTree = "<group>"; };
+		CFC8C045424F3632FE4B677C /* SvnAdvancedWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Svn/SvnAdvancedWindows.swift"; sourceTree = "<group>"; };
+		8228CF75780821E4DEEF379C /* SvnCoreWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Svn/SvnCoreWindows.swift"; sourceTree = "<group>"; };
+		0285AB3BD646CB06071C1EB5 /* SvnWorkingCopyDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Svn/SvnWorkingCopyDialogs.swift"; sourceTree = "<group>"; };
 		FF340F15A61D185E131622BA /* BadgeAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellFinderSync/BadgeAssets.swift"; sourceTree = "<group>"; };
 		A342BCA8095E72C8224B9C11 /* FinderSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellFinderSync/FinderSync.swift"; sourceTree = "<group>"; };
 		E73F2F2E7392215C7456CD66 /* MenuBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellFinderSync/MenuBuilder.swift"; sourceTree = "<group>"; };
@@ -232,6 +240,10 @@
 				B23DF4A95F91E0C261E5CB26,
 				E19487D08B4B921C2FF3A7AF,
 				650A5C0C5E68CCE017455615,
+				55DD9EEAD5C699C08325D623,
+				CFC8C045424F3632FE4B677C,
+				8228CF75780821E4DEEF379C,
+				0285AB3BD646CB06071C1EB5,
 				B54297522C284BB4FE2D8EEF,
 				FF340F15A61D185E131622BA,
 				A342BCA8095E72C8224B9C11,
@@ -476,6 +488,10 @@
 				94A6DD4EE952F25788102B8E,
 				6CF1D0D7AEC4FEE661A80673,
 				FB96AB2F23BA113AE788F5FB,
+				E93F976A6751EF0DF47FB1DD,
+				DC7BD409D06F3318D95D587D,
+				6DCC936C85156F4057957B54,
+				4473A2F08580EA139A73FA62,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -8,16 +8,19 @@ public final class RepositoryManager: ObservableObject, @unchecked Sendable {
 
     private let storage: SharedStorage
     private let gitProvider: GitProvider
+    private let svnProvider: SvnProvider
     private let lock = NSLock()
 
     public init(
         storage: SharedStorage = .shared,
-        gitProvider: GitProvider? = nil
+        gitProvider: GitProvider? = nil,
+        svnProvider: SvnProvider? = nil
     ) {
         self.storage = storage
         let loaded = storage.loadConfig()
         self.config = loaded
         self.gitProvider = gitProvider ?? GitProvider(preferencesProvider: { storage.loadConfig().preferences })
+        self.svnProvider = svnProvider ?? SvnProvider(preferencesProvider: { storage.loadConfig().preferences })
     }
 
     public func reload() {
@@ -42,13 +45,17 @@ public final class RepositoryManager: ObservableObject, @unchecked Sendable {
             if let gitRoot = await gitProvider.detectRepositoryRoot(for: norm) {
                 detectedType = .git
                 rootPath = gitRoot
-            } else if FileManager.default.fileExists(atPath: URL(fileURLWithPath: norm).appendingPathComponent(".svn").path) {
+            } else if let svnRoot = await svnProvider.detectRepositoryRoot(for: norm) {
                 detectedType = .svn
-                rootPath = norm
+                rootPath = svnRoot
             }
         } else if detectedType == .git {
             if let gitRoot = await gitProvider.detectRepositoryRoot(for: norm) {
                 rootPath = gitRoot
+            }
+        } else if detectedType == .svn {
+            if let svnRoot = await svnProvider.detectRepositoryRoot(for: norm) {
+                rootPath = svnRoot
             }
         }
 

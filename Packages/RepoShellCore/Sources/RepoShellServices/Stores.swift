@@ -141,4 +141,40 @@ public final class RecentHistoryStore: @unchecked Sendable {
         data.remoteURLs = []
         try? storage.write(data, to: storage.historyURL)
     }
+
+    public func recordSvnCommitMessage(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var data = load()
+        data.svnCommitMessages.removeAll { $0 == trimmed }
+        data.svnCommitMessages.insert(trimmed, at: 0)
+        if data.svnCommitMessages.count > maxCount {
+            data.svnCommitMessages = Array(data.svnCommitMessages.prefix(maxCount))
+        }
+        try? storage.write(data, to: storage.historyURL)
+    }
+
+    public func recordSvnRepoURL(_ url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var data = load()
+        data.svnRepoURLs.removeAll { $0 == trimmed }
+        data.svnRepoURLs.insert(trimmed, at: 0)
+        if data.svnRepoURLs.count > maxCount {
+            data.svnRepoURLs = Array(data.svnRepoURLs.prefix(maxCount))
+        }
+        try? storage.write(data, to: storage.historyURL)
+    }
+
+    public func clearSvnCommitMessages() {
+        var data = load()
+        data.svnCommitMessages = []
+        try? storage.write(data, to: storage.historyURL)
+    }
+
+    public func clearSvnRepoURLs() {
+        var data = load()
+        data.svnRepoURLs = []
+        try? storage.write(data, to: storage.historyURL)
+    }
 }

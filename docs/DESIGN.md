@@ -425,47 +425,67 @@ sequenceDiagram
 
 ---
 
-## 第 10 章：V2 SVN 架构对照与扩展设计
+## 第 10 章：V2 SVN 架构与完整复刻设计（SnailSVN 1.10 对等实现）
 
-为确保 V1 Git 开发完成后，V2 接入 SVN 不破坏既有模型与 UI 骨架，V1 即按以下契约构建边界。
+为全面支持集中式版本控制 Subversion (SVN) 并复刻 **SnailSVN 1.10** 的完整工作流，V2 在保留 V1 Git 抽象骨架与零迁移破坏前提下，按已确认的设计决策 **1A–8A** 落地以下端到端架构。
 
 ### 10.1 Git vs SVN 核心能力与状态对照
 
 | 维度 | V1 Git (`GitProvider`) | V2 SVN (`SvnProvider`) | 统一抽象层处置 |
 | :--- | :--- | :--- | :--- |
-| **工作模型** | 分布式：工作区 + 暂存区 (Index) + 本地仓库 | 集中式：工作副本 (WC) 直连远端 URL | `VcsCapability.stagingIndex` 控制 Commit 窗口是否显示 Staged 分区或直提 WC。 |
-| **版本识别** | `.git` 目录（仅根目录存在，或 worktree `.git` 文件） | `.svn` 目录（1.7+ 仅根目录存在；1.6 及以前每级子目录都有） | `detectRepositoryRoot` 从子目录向上查找到最顶层含 `.svn` 的目录，并解析 `svn info --show-item wc-root`。 |
-| **状态集合** | `normal`, `modified`, `added`, `deleted`, `renamed`, `copied`, `typeChanged`, `unmerged`, `untracked`, `ignored`, `external`(submodule) | `normal`, `modified`, `added`, `deleted`, `replaced`, `unmerged`(conflict), `missing`, `obstructed`, `untracked`, `ignored`, `external`, `locked`, `readOnly` | `VcsFileStatus` 已在 V1 包含全部 16 种状态；FinderSync 扩展仅增加 `LockedIcon` 与 `ExternalIcon` 角标注册即可直接渲染。 |
-| **远端同步** | Fetch / Pull / Push 拆分 | `svn update`（支持更新至指定版本 `--revision` & 深度 `--set-depth`）+ `svn commit` 直接推远端 | `VcsProvider.update` 与 `VcsProvider.commit` 统一主路径；Push/Fetch 按钮依据 `VcsCapability.pushFetch` 动态显隐。 |
-| **分支/标签** | 轻量化本地引用 + `git switch` / `git merge` | 基于仓库路径拷贝 `svn copy` (`trunk`/`branches`/`tags`) + `svn switch` + `svn merge` (Range / Reintegrate / 2-URL Trees) | `BranchTagWindow`、`MergeWindow` 通过 `vcsType` 渲染对应分支面板或 URL 选择面板 (`URLPicker`)。 |
-| **锁定与属性** | 不适用 | `svn lock` / `svn unlock`、`svn proplist`/`propset`/`propdel`（含 `svn:ignore`、`svn:externals`、`svn:needs-lock`） | 通过 `VcsCapability.locking` / `.properties` 控制 Finder 菜单与专属窗口挂载。 |
-| **补丁工作流** | `git format-patch` / `git apply` | `svn diff > file.patch` / `svn patch` | V2 增加 `CreatePatchWindow` & `ApplyPatchWindow`。 |
+| **工作模型** | 分布式：工作区 + 暂存区 (Index) + 本地仓库 | 集中式：工作副本 (WC) 直连远端 URL | `VcsCapability.stagingIndex` 控制 Commit 窗口是否显示 Staged 分区；SVN 直提工作副本，支持提交时自动 `svn add` 未版本化文件与自动 `svn delete` 丢失文件。 |
+| **版本识别** | `.git` 目录（仅根目录存在，或 worktree `.git` 文件） | `.svn` 目录（1.7+ 仅根目录存在；1.6 及以前每级子目录都有） | `SvnProvider.detectRepositoryRoot` 从目标路径向上查找到最顶层含 `.svn` 的目录，并辅以 `svn info --show-item wc-root` 校正。 |
+| **状态集合** | `normal`, `modified`, `added`, `deleted`, `renamed`, `copied`, `typeChanged`, `unmerged`, `untracked`, `ignored`, `external`(submodule) | `normal`, `modified`, `added`, `deleted`, `replaced`, `unmerged`(conflict), `missing`, `obstructed`, `untracked`, `ignored`, `external`, `locked`, `readOnly` | `VcsFileStatus` 包含全部 16 种状态；FinderSync 通过 `BadgeAssets` 完整渲染 Normal / Modified / Added / Deleted / Conflict / Untracked / Ignored / External / Locked / ReadOnly 角标。 |
+| **分支展示** | 当前分支名 / Detached HEAD SHA | `<relativeURL> (r<revision>)`（如 `trunk (r1420)`、`branches/v2 (r1420)`） | 由 `svn info --xml` 解析 `relative-url`（去除 `^/` 前缀）与 `entry/@revision` 组装为统一的 `branchName`。 |
+| **远端同步** | Fetch / Pull / Push 拆分 | `svn update`（支持更新至指定版本 `--revision` & 深度 `--set-depth`）+ `svn commit` 直接推远端 | `VcsProvider` 统一提交主路径；SVN 新增 `update` / `updateToRevision`；Push/Fetch 依据 `VcsCapability.pushFetch` 动态隐藏。 |
+| **分支/标签** | 轻量化本地引用 + `git switch` / `git merge` | 仓库路径拷贝 `svn copy` (`trunk`/`branches`/`tags`) + `svn switch` + `svn merge` (Range / Two-Trees + `--dry-run`) | 独立提供 `SvnBranchTagWindowView`、`SvnSwitchWindowView`、`SvnMergeWindowView`。 |
+| **锁定与属性** | 不适用 | `svn lock` / `svn unlock`（含 Steal/Break）、`svn proplist`/`propset`/`propdel`（`svn:ignore`、`svn:externals`、`svn:needs-lock`、`svn:eol-style` 等） | 通过 `VcsCapability.locking` / `.properties` 控制 Finder 菜单与专属窗口挂载。 |
+| **补丁工作流** | `git format-patch` / `git apply` | `svn diff > file.patch` / `svn patch` | 提供 `SvnCreatePatchWindowView` 与 `SvnApplyPatchWindowView`。 |
 
-### 10.2 UI 窗口复用矩阵与 V2 扩展挂载点
+### 10.2 已确认设计决策（1A–8A）与实现规范
 
-| 窗口 | V1 Git | V2 SVN 复用策略 |
+1. **SVN 可执行文件定位（1A）**：
+   - `SvnExecutableResolver` 自动探测系统常见路径（`/opt/homebrew/bin/svn`、`/usr/local/bin/svn`、`/usr/bin/svn`，以及同级 `svnadmin`）。
+   - `AppPreferences` 提供自定义 `externalSvnPath`、`svnDylibPath`（注入 `DYLD_LIBRARY_PATH`）与预留内置槽位 `Contents/Resources/subversion/`（`useBundledSvn` 默认 `false`、`externalSvnPath` 默认空字符串）。
+2. **SnailSVN 1.10 全量功能矩阵（2A）**：
+   - **基础操作**：`Update`、`Update to Revision`、`Commit`（自动 Add 未跟踪 / 自动 Delete 丢失项 / Changelists / Keep locks / 历史提交信息）、`Show Log`（分页 + 过滤 + 还原指定版本/范围变更 + 在线修改 `svn:log` 属性）、`Check for Modifications`（本地状态 + 一键 `svn status -u` 检查远端变更与服务器锁）、`Checkout`、`Create Repository` (`svnadmin create`)、`Export`、`Diff / Diff with Previous Version / Diff Later`（集成 `ImageDiffWindowView` 与外部 Diff 工具）、`Resolve Conflicts`（Base / Mine Full / Theirs Full / Mine Conflict / Theirs Conflict / Working + 外部 Merge 工具）、`Revert`、`Add`、`Delete` / `Delete (Keep Local)`、`Rename`、`Move` (`svn move --parents`)、`Add to Ignore List` (`svn:ignore` + Global ignores)、`Clean up`、`SVN Info`、`Upgrade Working Copy`。
+   - **进阶操作**：`Repo-browser`（远端 `mkdir` / `copy` / `move` / `delete` / `checkout` / `export` / 查看属性 / 在线编辑或提取文件）、`Branch / Tag` (`svn copy` + 可选 copy 后 switch)、`Switch`、`Merge`（Range of revisions / Two different trees + `--dry-run` 测试合并 + Reintegrate / Record-only / Depth / Ignore ancestry / Whitespace）、`Get Lock` / `Release Lock`（含 Steal / Break Lock）、`Properties`（表格浏览 + 新增/编辑/删除 + `svn:ignore`/`svn:externals`/`svn:needs-lock`/`svn:eol-style`/`svn:executable`/`svn:mime-type`/`svn:keywords` 预设 + 递归 `-R`）、`Relocate`、`Import`、`Blame`、`Compare Revisions`、`Create Patch` / `Apply Patch`。
+3. **Finder 右键一级菜单置顶（3A）**：
+   - 新增独立偏好 `AppPreferences.svnTopLevelMenuActions`，默认 `[.svnUpdate, .svnCommit, .showLog, .checkForModifications]`。
+   - 候选列表：`svnUpdate`, `svnUpdateToRevision`, `svnCommit`, `showLog`, `checkForModifications`, `diff`, `revert`, `svnCleanup`, `svnLock`, `svnUnlock`, `svnProperties`, `repoBrowser`，可在 General 设置页独立勾选调整，并渲染彩色图标。
+4. **主窗口 5 Tab 与 SVN 设置页（4A）**：
+   - `MainWindowView` 扩展为 5 个标签页：`Repositories | General | Git | SVN | Quick Actions`。
+   - `SvnTabView` 包含 4 个子页：常规参数（日志每页条数 `svnLogLimit=100`、`svnDeleteForce`、SVN CLI 与 dylib 状态）、全局忽略模式（双向同步 `~/.subversion/config` `[miscellany] global-ignores`）、`~/.subversion/config` 原始配置文件编辑器、SVN 提交历史与 URL 历史管理。
+5. **认证、Askpass、SSL 证书确认与局域网恢复（5A）**：
+   - 复用 `~/.subversion/auth/` 与系统 Keychain，同时支持每仓库配置 `RepoAuthConfig`（无认证 / 用户名密码 / SSH 私钥，注入 `SVN_SSH` 调起 `reposhell-askpass`）。
+   - 所有命令严格携带 `--non-interactive`，并在日志/UI 错误展示前脱敏 `--password` 参数。
+   - 复用 `GitProvider` 的 macOS 15 NECP 本地局域网连接瞬断自动重试机制与本地网络权限提示横幅。
+   - 运行时捕获认证失败码（`E170001`、`E215004`、`E175013`）弹出 `AskpassPromptView` 输入凭据并可选存入 Keychain 后重试；捕获 SSL 证书信任失败（`E230001`）弹出交互确认（**临时接受** / **永久接受并写入 `~/.subversion/auth/svn.ssl.server/`** / **拒绝**）后重试。
+6. **非仓库目录 Finder 右键菜单（6A）**：
+   - 若右键目标目录包含 `.git` 或 `.svn`，首位显示 `Add Repository…`。
+   - 接着依次显示 Git 分组（`Git Clone…`、`Create Git Repository Here…`）、分隔线、SVN 分组（`SVN Checkout…`、`Create SVN Repository Here…`、`SVN Import…`）、分隔线、`Show RepoShell`。
+7. **后台状态刷新与大仓库性能防护（7A）**：
+   - `StatusEngine` 对所有 `.svn` 仓库统一在后台定时与 FSEvents 触发刷新，仅执行本地 `svn status --xml` 与 `svn info --xml`（严禁在后台自动执行带 `-u` 的远端联网检查，远端检查仅在 `Check for Modifications` 点击后按需触发）。
+   - FSEvents 过滤 `.svn/wc.db-journal`、`.svn/wc.db-wal`、`.svn/wc.db-shm` 与 `/.svn/tmp/` 防止 SQLite WAL 自触发死循环。
+   - `Show Log` 默认分页大小为 `100` 条 (`svnLogLimit = 100`)。
+8. **Quick Actions 支持（8A）**：
+   - 共享 Quick Actions（提交、显示日志、Diff、对比前一版本、检测改动、版本库浏览器、复原、添加、删除、重命名、追溯、比较版本、导出）在运行时根据目标路径的仓库类型自动分发到 Git 或 SVN 动作。
+   - 新增 SVN 专属 Quick Actions：`svnUpdate`、`svnCheckout`、`svnCleanup`、`svnLock`、`svnUnlock`、`svnProperties`。
+
+### 10.3 UI 窗口复用矩阵与 SVN 窗口清单
+
+| 窗口 | VCS 类型 | 实现位置与复用策略 |
 | :--- | :--- | :--- |
-| `MainWindowController` | 4 Tabs (Repositories, General, Git, Quick Actions) | 第 3 个 Tab 扩展为「VCS 设置」分段或并列 `Git` 与 `SVN` Tab（SVN 配置内含全局忽略模式、外部/内置 `svn` CLI 路径、SSL/SSH 参数、字符编码自动检测开关）。 |
-| `CommitWindowController` | Git Commit | **直接复用**：隐藏 Git 专属项（Amend、Commit & Push），保留文件勾选、Changelists、最近信息历史、双击 Diff、Unversioned 勾选。 |
-| `LogWindowController` | Git Log | **直接复用**：三栏结构完全一致（Revision `r1234`、Author、Date、Message、Changed Paths `A/M/D/R`、`Copy-from` 路径）；右键切换为「Update to revision」「Revert changes from this revision」「Edit log message (`svn propset --revprop svn:log`)」。 |
-| `ModificationsWindowController` | Check for Modifications | **直接复用**：底部统计栏天然预留 `Missing / External / Locked`；V2 可增加「Check Repository（`svn status -u`）」远端待更新项开关。 |
-| `RepoBrowserWindowController` | Git Tree Browser | **直接复用**：顶栏输入 SVN URL + Revision，V2 右键扩展「Create Folder (`svn mkdir`)」「Import」「Copy to」「Move/Rename」「Delete」「Checkout」。 |
-| `BlameDialog` & `BlameResult` / `CompareRevisions` / `ImageDiff` / `ResolveConflicts` / `Revert` / `Export` | Git 实现 | **100% 复用共享 ViewModel 协议**；`ResolveWindow` 在 SVN 冲突时自动使用 `$BASE`/`$LOCAL`/`$REMOTE`/`$MERGED` 调起配置好的 **Merge Tool**。 |
+| `MainWindowView` / `SvnTabView` / `GeneralTabView` | Shared + SVN | 5 Tab 结构；`GeneralTabView` 分区配置 Git/SVN 一级置顶菜单；`RepositoriesTabView` 支持添加/新建/签出/导入 SVN 仓库及专门的右键操作。 |
+| `BlameResultWindowView` | Shared | 复用内置代码追溯结果视图，按 `vcsType` 区分版本号展示（`r1234` vs 短哈希）与跳转日志行为。 |
+| `ImageDiffWindowView` | Shared | 100% 复用 4 模式图片对比视图。 |
+| `SvnCommitWindowView` / `SvnModificationsWindowView` / `SvnLogWindowView` | SVN | 位于 `Targets/RepoShellApp/Windows/Svn/SvnCoreWindows.swift`，分别对应 SnailSVN Commit（自动 Add/Delete、Changelist、Keep locks）、Check for Modifications（含远端 `-u` 检查）与 Show Log（分页、过滤、Revert revision changes、Edit `svn:log`）。 |
+| `SvnCheckoutWindowView` / `SvnCreateRepoWindowView` / `SvnUpdateToRevisionWindowView` / `SvnExportWindowView` / `SvnCleanupWindowView` / `SvnResolveConflictsWindowView` / `SvnRevertWindowView` / `SvnMoveRenameWindowView` / `SvnAddToIgnoreWindowView` / `SvnInfoWindowView` | SVN | 位于 `Targets/RepoShellApp/Windows/Svn/SvnWorkingCopyDialogs.swift`。 |
+| `SvnRepoBrowserWindowView` / `SvnBranchTagWindowView` / `SvnSwitchWindowView` / `SvnMergeWindowView` / `SvnLockUnlockWindowView` / `SvnPropertiesWindowView` / `SvnRelocateWindowView` / `SvnImportWindowView` / `SvnBlameDialogView` / `SvnCompareRevisionsWindowView` / `SvnPatchWindowView` | SVN | 位于 `Targets/RepoShellApp/Windows/Svn/SvnAdvancedWindows.swift`。 |
 
-**V2 专属新增窗口挂载点**（注册于 `WindowCoordinator.open(action:)` 与 `MenuAction` 预留位）：
-- `SvnCheckoutWindowController`（URL、深度 `infinity/immediates/files/empty`、Revision、Ignore externals）
-- `SvnUpdateToRevisionWindowController`
-- `SvnMergeWindowController`（三模式向导：Merge a range of revisions / Reintegrate a branch / Merge two different trees）
-- `SvnSwitchWindowController` & `SvnBranchTagWindowController`（`svn copy` URL Picker）
-- `SvnLockWindowController` / `SvnUnlockWindowController`
-- `SvnPropertiesWindowController`（增删改属性、`svn:ignore`、`svn:externals`、`svn:needs-lock`、`svn:eol-style`）
-- `SvnCleanupWindowController`（修复 WC 锁、清理未版本化/忽略文件、清理 pristines）
-- `SvnRelocateWindowController` / `SvnImportWindowController` / `SvnCreatePatchWindowController` / `SvnApplyPatchWindowController`
-
-### 10.3 `SvnProvider` 实现蓝图（V2）
-- 命令执行继续复用 `RepoShellVcs.ProcessRunner`（内置或外部 `svn` 1.14+）。
-- 状态与日志全部使用 `svn status --xml`、`svn log --xml -v`、`svn info --xml`、`svn list --xml`、`svn diff --xml` —— 基于 Swift `Foundation.XMLParser` 零二义性解析，彻底避免多语言本地化文本输出差异。
-- `svn` 非交互认证参数：`--non-interactive` 搭配密码凭据缓存或交互拦截（遇到认证失败退出码 E170001 / E215004 时唤醒 `AskpassWindowController` 并将 `--username` / `--password` 重试）。
+### 10.4 `SvnProvider` 实现蓝图
+- **XML 零二义性解析（`SvnXmlParsers.swift`）**：基于 `Foundation.XMLParser` 严格解析 `svn status --xml`、`svn info --xml`、`svn log --xml -v`、`svn list --xml`、`svn blame --xml`、`svn proplist --xml`、`svn diff --summarize --xml`，彻底隔离系统语言环境差异并正确处理中文/空格路径。
+- **核心执行引擎（`SvnProvider.swift`）**：基于 `ProcessRunner` 与 `SvnExecutableResolver` 执行 CLI 命令，`StatusEngine` 通过 `buildFolderStatuses` 向上聚合目录状态气泡；所有交互式错误均经 `SvnErrorClassifier` 结构化分类后交由 `AppContainer.runSvnInteractive` 自动重连、弹框鉴权或确认证书。
 
 ---
 
@@ -480,10 +500,12 @@ sequenceDiagram
 ### 11.2 自动化测试矩阵
 1. **单元测试 (`RepoShellCoreTests`)**：
    - `GitParsersTests`：porcelain v2（中文/空格/引号/重命名/冲突/子模块）、log、numstat、blame、reflog、stash、ls-tree 解析测试。
-   - `MenuAndStatusTests`：文件夹状态聚合优先级、16 种 `VcsFileStatus` 映射、上下文菜单可见性矩阵、网盘路径检测。
-   - `ServicesTests`：App Group 原子存储、DiffTool 预设加载与变量替换、QuickAction `.workflow` plist 生成、URL Scheme 编解码。
-2. **真实 Git 仓库集成测试 (`GitProviderIntegrationTests`)**：
-   - 使用系统 `git` 在临时目录创建真实仓库与 bare remote，端到端执行并断言：Init、Commit、Amend、Branch/Tag/Checkout、Merge 冲突及 Ours/Theirs 解决、Reset (Soft/Mixed/Hard)、Stash (Save/Apply/Pop/Drop)、Log 过滤、Compare Revisions、Repo-browser 提取、Blame、Interactive Rebase (Squash/Drop)、Cherry-Pick、RefLog、Submodule、Commit Notes、Export Zip、Fetch/Pull/Push。
+   - `SvnParsersTests`：`svn status --xml`、`info --xml`、`log --xml -v`、`list --xml`、`blame --xml`、`proplist --xml`、`diff --summarize --xml` 与 `SvnErrorClassifier` 解析测试。
+   - `MenuAndStatusTests`：文件夹状态聚合优先级、16 种 `VcsFileStatus` 映射、Git/SVN 上下文菜单可见性矩阵（含 6A 非仓库菜单与 3A 一级置顶菜单）、网盘路径检测。
+   - `ServicesTests`：App Group 原子存储、旧版 `config.json` 向后兼容解码、DiffTool 预设加载与变量替换、QuickAction `.workflow` plist 生成、URL Scheme 编解码。
+2. **真实仓库集成测试 (`GitProviderIntegrationTests` & `SvnProviderIntegrationTests`)**：
+   - Git：使用系统 `git` 在临时目录创建真实仓库与 bare remote，端到端执行并断言全部基础与进阶操作。
+   - SVN：使用 `svnadmin create` 在临时目录创建真实 `file://` 仓库与双工作副本（模拟协同冲突），端到端验证 Checkout、Status XML、Info XML、Add/Delete/Move/Ignore、Commit (含 Changelist / Keep Locks)、Update / Update to Revision、Show Log (`-v` / 编辑 `svn:log` / Revert revision)、Diff / Compare Revisions、Blame、Lock / Unlock (`--force`)、Properties (`svn:ignore`/`svn:externals`/`svn:needs-lock`)、Branch/Tag (`svn copy`)、Switch、Merge (`--dry-run` + real)、Create/Apply Patch、Cleanup 与冲突解决。
 3. **Xcode 构建与签名产物校验**：
    - `xcodebuild` 全量编译零报错。
    - `codesign --verify --deep --strict RepoShell.app` 验证所有嵌套 `.appex`、Helpers 与内置 Git 签名完整。

@@ -47,7 +47,7 @@ struct GeneralTabView: View {
             Section(header: Text(L("General Options", "通用选项"))) {
                 Toggle(L("Cascade context menu items", "级联显示右键菜单项"), isOn: binding(\.cascadeMenu))
                 if repoManager.config.preferences.cascadeMenu {
-                    DisclosureGroup(L("Top-level context menu actions", "右键一级菜单常用操作")) {
+                    DisclosureGroup(L("Git top-level context menu actions", "Git 右键一级菜单常用操作")) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L(
                                 "Selected actions appear directly in Finder's top-level context menu; remaining actions stay in the RepoShell submenu.",
@@ -83,6 +83,50 @@ struct GeneralTabView: View {
                                 Button(L("All in Submenu", "全部收纳到子菜单")) {
                                     repoManager.updatePreferences { prefs in
                                         prefs.topLevelMenuActions = []
+                                    }
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    DisclosureGroup(L("SVN top-level context menu actions", "SVN 右键一级菜单常用操作")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(L(
+                                "Selected SVN actions appear directly in Finder's top-level context menu for SVN working copies.",
+                                "勾选的 SVN 操作将直接显示在访达右键一级菜单中，其余操作收纳在 RepoShell 子菜单内。"
+                            ))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                            let loc = Localization(language: repoManager.config.preferences.language)
+                            LazyVGrid(
+                                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                                alignment: .leading,
+                                spacing: 6
+                            ) {
+                                ForEach(AppPreferences.promotableSvnMenuActions, id: \.self) { action in
+                                    Toggle(isOn: svnTopLevelActionBinding(action)) {
+                                        HStack(spacing: 6) {
+                                            Image(nsImage: MenuActionIconRenderer.menuIcon(for: action, size: 15))
+                                                .frame(width: 15, height: 15)
+                                            Text(loc.string(action.localizationKey))
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+
+                            HStack(spacing: 10) {
+                                Button(L("Reset Defaults", "恢复默认")) {
+                                    repoManager.updatePreferences { prefs in
+                                        prefs.svnTopLevelMenuActions = AppPreferences.defaultSvnTopLevelMenuActions
+                                    }
+                                }
+                                Button(L("All in Submenu", "全部收纳到子菜单")) {
+                                    repoManager.updatePreferences { prefs in
+                                        prefs.svnTopLevelMenuActions = []
                                     }
                                 }
                             }
@@ -229,6 +273,23 @@ struct GeneralTabView: View {
                         selected.remove(action)
                     }
                     prefs.topLevelMenuActions = AppPreferences.promotableMenuActions.filter { selected.contains($0) }
+                }
+            }
+        )
+    }
+
+    private func svnTopLevelActionBinding(_ action: MenuAction) -> Binding<Bool> {
+        Binding(
+            get: { repoManager.config.preferences.svnTopLevelMenuActions.contains(action) },
+            set: { enabled in
+                repoManager.updatePreferences { prefs in
+                    var selected = Set(prefs.svnTopLevelMenuActions)
+                    if enabled {
+                        selected.insert(action)
+                    } else {
+                        selected.remove(action)
+                    }
+                    prefs.svnTopLevelMenuActions = AppPreferences.promotableSvnMenuActions.filter { selected.contains($0) }
                 }
             }
         )

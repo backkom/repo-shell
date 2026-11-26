@@ -72,9 +72,20 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
     case submoduleUpdate = "submodule-update"
     case submoduleManage = "submodule-manage"
 
-    // V2 SVN Extension Slots (unused in V1 Git UI, ready for V2)
+    // SVN Basic & Advanced Operations (SnailSVN 1.10 parity)
+    case svnCommit = "svn-commit"
     case svnCheckout = "svn-checkout"
+    case svnCreateRepo = "svn-create-repo"
+    case svnImport = "svn-import"
     case svnUpdate = "svn-update"
+    case svnUpdateToRevision = "svn-update-to-revision"
+    case svnBranchTag = "svn-branch-tag"
+    case svnSwitch = "svn-switch"
+    case svnMerge = "svn-merge"
+    case svnMove = "svn-move"
+    case svnCleanup = "svn-cleanup"
+    case svnInfo = "svn-info"
+    case svnUpgrade = "svn-upgrade"
     case svnLock = "svn-lock"
     case svnUnlock = "svn-unlock"
     case svnProperties = "svn-properties"
@@ -84,8 +95,10 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
 
     public var acceptsSelectedFiles: Bool {
         switch self {
-        case .gitCommit, .showLog, .resolveConflicts, .revert, .diff, .diffPrevious,
-             .diffLater, .diffWithLater, .add, .delete, .deleteKeepLocal, .rename,
+        case .gitCommit, .svnCommit, .svnUpdate, .svnUpdateToRevision, .svnCleanup, .svnInfo,
+             .svnLock, .svnUnlock, .svnProperties, .svnCreatePatch, .svnApplyPatch,
+             .showLog, .resolveConflicts, .revert, .diff, .diffPrevious,
+             .diffLater, .diffWithLater, .add, .delete, .deleteKeepLocal, .rename, .svnMove,
              .addToIgnore, .blame, .checkForModifications:
             return true
         default:
@@ -96,7 +109,7 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
     public var requiresSelectedFiles: Bool {
         switch self {
         case .diff, .diffPrevious, .diffLater, .diffWithLater, .add, .delete,
-             .deleteKeepLocal, .rename, .addToIgnore, .blame:
+             .deleteKeepLocal, .rename, .svnMove, .addToIgnore, .blame:
             return true
         default:
             return false
@@ -110,11 +123,12 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
         case .excludeRepository: return "folder.fill.badge.minus"
         case .refresh: return "arrow.clockwise.circle.fill"
         case .gitClone, .svnCheckout: return "arrow.down.doc.fill"
-        case .gitInit: return "folder.fill.badge.plus"
-        case .gitCommit: return "checkmark.circle.fill"
+        case .gitInit, .svnCreateRepo: return "folder.fill.badge.plus"
+        case .gitCommit, .svnCommit: return "checkmark.circle.fill"
         case .gitPull, .svnUpdate: return "arrow.down.circle.fill"
-        case .gitFetch: return "arrow.down.to.line.circle.fill"
-        case .gitPush: return "arrow.up.circle.fill"
+        case .gitFetch, .svnUpdateToRevision: return "arrow.down.to.line.circle.fill"
+        case .gitPush, .svnUpgrade: return "arrow.up.circle.fill"
+        case .svnImport: return "square.and.arrow.down.fill"
         case .showLog: return "clock.arrow.circlepath"
         case .checkForModifications: return "doc.text.magnifyingglass"
         case .browseReferences: return "point.3.connected.trianglepath.dotted"
@@ -123,10 +137,10 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
         case .repoBrowser: return "sidebar.squares.left"
         case .resolveConflicts: return "exclamationmark.triangle.fill"
         case .revert: return "arrow.uturn.backward.circle.fill"
-        case .checkout: return "arrow.triangle.swap"
-        case .createBranch: return "arrow.triangle.branch"
+        case .checkout, .svnSwitch: return "arrow.triangle.swap"
+        case .createBranch, .svnBranchTag: return "arrow.triangle.branch"
         case .createTag: return "tag.fill"
-        case .merge: return "arrow.triangle.merge"
+        case .merge, .svnMerge: return "arrow.triangle.merge"
         case .abortMerge: return "xmark.octagon.fill"
         case .reset: return "backward.end.circle.fill"
         case .export: return "square.and.arrow.up.fill"
@@ -136,28 +150,33 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
         case .delete: return "trash.fill"
         case .deleteKeepLocal: return "trash.slash.fill"
         case .rename: return "pencil.circle.fill"
+        case .svnMove: return "arrow.right.circle.fill"
         case .addToIgnore: return "eye.slash.fill"
-        case .repoInfo: return "info.circle.fill"
-        case .cleanup: return "sparkles"
+        case .repoInfo, .svnInfo: return "info.circle.fill"
+        case .cleanup, .svnCleanup: return "sparkles"
         case .rebase: return "arrow.up.and.down.text.horizontal"
         case .cherryPick: return "wand.and.stars"
         case .showRefLog: return "list.bullet.rectangle.fill"
         case .blame: return "person.text.rectangle.fill"
         case .submoduleAdd, .submoduleUpdate, .submoduleManage:
             return "shippingbox.fill"
-        default: return "gearshape.fill"
+        case .svnLock: return "lock.fill"
+        case .svnUnlock: return "lock.open.fill"
+        case .svnProperties: return "slider.horizontal.3"
+        case .svnRelocate: return "link.circle.fill"
+        case .svnCreatePatch, .svnApplyPatch: return "bandage.fill"
         }
     }
 
     public var iconStyle: MenuActionIconStyle {
         switch self {
-        case .gitCommit, .add:
+        case .gitCommit, .svnCommit, .add:
             return .badge(fill: RGBColor(r: 34, g: 168, b: 83))
-        case .gitPull, .svnUpdate, .repoInfo, .refresh, .rename:
+        case .gitPull, .svnUpdate, .repoInfo, .svnInfo, .refresh, .rename, .svnMove:
             return .badge(fill: RGBColor(r: 29, g: 124, b: 242))
-        case .gitFetch, .diff, .diffPrevious, .diffLater, .diffWithLater, .compareRevisions:
+        case .gitFetch, .svnUpdateToRevision, .diff, .diffPrevious, .diffLater, .diffWithLater, .compareRevisions:
             return .badge(fill: RGBColor(r: 14, g: 154, b: 180))
-        case .gitPush:
+        case .gitPush, .svnUpgrade:
             return .badge(fill: RGBColor(r: 238, g: 122, b: 24))
         case .resolveConflicts:
             return .badge(fill: RGBColor(r: 234, g: 148, b: 0))
@@ -165,9 +184,11 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
             return .badge(fill: RGBColor(r: 234, g: 134, b: 0))
         case .reset, .abortMerge:
             return .badge(fill: RGBColor(r: 224, g: 62, b: 62))
+        case .svnRelocate:
+            return .badge(fill: RGBColor(r: 219, g: 68, b: 143))
         case .showApp:
             return .twoTone(primary: RGBColor(r: 224, g: 62, b: 62), secondary: RGBColor(r: 29, g: 124, b: 242))
-        case .addRepository, .gitInit:
+        case .addRepository, .gitInit, .svnCreateRepo:
             return .twoTone(primary: RGBColor(r: 34, g: 168, b: 83), secondary: RGBColor(r: 29, g: 124, b: 242))
         case .excludeRepository:
             return .twoTone(primary: RGBColor(r: 224, g: 62, b: 62), secondary: RGBColor(r: 100, g: 116, b: 139))
@@ -175,21 +196,21 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
             return .twoTone(primary: RGBColor(r: 29, g: 124, b: 242), secondary: RGBColor(r: 14, g: 154, b: 180))
         case .stashPush:
             return .twoTone(primary: RGBColor(r: 230, g: 134, b: 0), secondary: RGBColor(r: 204, g: 106, b: 0))
-        case .gitClone, .svnCheckout, .checkout:
+        case .gitClone, .svnCheckout, .checkout, .svnSwitch:
             return .solid(color: RGBColor(r: 29, g: 124, b: 242))
-        case .showLog, .browseReferences, .merge:
+        case .showLog, .browseReferences, .merge, .svnMerge:
             return .solid(color: RGBColor(r: 126, g: 87, b: 224))
-        case .showRefLog, .rebase:
+        case .showRefLog, .rebase, .svnProperties:
             return .solid(color: RGBColor(r: 99, g: 102, b: 241))
-        case .repoBrowser, .export:
+        case .repoBrowser, .export, .svnImport:
             return .solid(color: RGBColor(r: 14, g: 154, b: 180))
-        case .blame:
+        case .blame, .svnCreatePatch, .svnApplyPatch:
             return .solid(color: RGBColor(r: 168, g: 85, b: 247))
-        case .createBranch:
+        case .createBranch, .svnBranchTag, .svnUnlock:
             return .solid(color: RGBColor(r: 34, g: 168, b: 83))
         case .createTag, .cherryPick:
             return .solid(color: RGBColor(r: 219, g: 68, b: 143))
-        case .stashList:
+        case .stashList, .svnLock:
             return .solid(color: RGBColor(r: 230, g: 134, b: 0))
         case .submoduleAdd, .submoduleUpdate, .submoduleManage:
             return .solid(color: RGBColor(r: 186, g: 118, b: 42))
@@ -199,10 +220,8 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
             return .solid(color: RGBColor(r: 230, g: 110, b: 40))
         case .addToIgnore:
             return .solid(color: RGBColor(r: 100, g: 116, b: 139))
-        case .cleanup:
+        case .cleanup, .svnCleanup:
             return .solid(color: RGBColor(r: 234, g: 160, b: 0))
-        default:
-            return .solid(color: RGBColor(r: 100, g: 116, b: 139))
         }
     }
 
@@ -211,7 +230,8 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
         case .gitCommit, .gitPull, .gitFetch, .gitPush, .showLog,
              .checkForModifications, .browseReferences, .stashPush, .stashList,
              .repoBrowser, .revert, .checkout, .createBranch, .createTag, .merge,
-             .diff, .diffPrevious, .add, .blame, .repoInfo:
+             .diff, .diffPrevious, .add, .delete, .rename, .blame, .compareRevisions, .export, .repoInfo,
+             .svnUpdate, .svnCheckout, .svnCleanup, .svnLock, .svnUnlock, .svnProperties:
             return true
         default:
             return false
@@ -264,9 +284,25 @@ public enum MenuAction: String, Codable, CaseIterable, Sendable {
         case .submoduleAdd: return "menu.submoduleAdd"
         case .submoduleUpdate: return "menu.submoduleUpdate"
         case .submoduleManage: return "menu.submoduleManage"
-        case .svnCheckout, .svnUpdate, .svnLock, .svnUnlock,
-             .svnProperties, .svnRelocate, .svnCreatePatch, .svnApplyPatch:
-            return rawValue
+        case .svnCommit: return "menu.svnCommit"
+        case .svnCheckout: return "menu.svnCheckout"
+        case .svnCreateRepo: return "menu.svnCreateRepo"
+        case .svnImport: return "menu.svnImport"
+        case .svnUpdate: return "menu.svnUpdate"
+        case .svnUpdateToRevision: return "menu.svnUpdateToRevision"
+        case .svnBranchTag: return "menu.svnBranchTag"
+        case .svnSwitch: return "menu.svnSwitch"
+        case .svnMerge: return "menu.svnMerge"
+        case .svnMove: return "menu.svnMove"
+        case .svnCleanup: return "menu.svnCleanup"
+        case .svnInfo: return "menu.svnInfo"
+        case .svnUpgrade: return "menu.svnUpgrade"
+        case .svnLock: return "menu.svnLock"
+        case .svnUnlock: return "menu.svnUnlock"
+        case .svnProperties: return "menu.svnProperties"
+        case .svnRelocate: return "menu.svnRelocate"
+        case .svnCreatePatch: return "menu.svnCreatePatch"
+        case .svnApplyPatch: return "menu.svnApplyPatch"
         }
     }
 }
@@ -284,6 +320,7 @@ public struct MenuResolutionContext: Sendable {
     public var snapshot: RepoStatusSnapshot?
     public var diffLaterState: DiffLaterState?
     public var directoryContainsGitFolder: Bool
+    public var directoryContainsSvnFolder: Bool
     public var isDirectoryCleanRepoCandidate: Bool
     public var language: AppLanguage
 
@@ -294,6 +331,7 @@ public struct MenuResolutionContext: Sendable {
         snapshot: RepoStatusSnapshot?,
         diffLaterState: DiffLaterState?,
         directoryContainsGitFolder: Bool,
+        directoryContainsSvnFolder: Bool = false,
         isDirectoryCleanRepoCandidate: Bool = true,
         language: AppLanguage = .system
     ) {
@@ -303,6 +341,7 @@ public struct MenuResolutionContext: Sendable {
         self.snapshot = snapshot
         self.diffLaterState = diffLaterState
         self.directoryContainsGitFolder = directoryContainsGitFolder
+        self.directoryContainsSvnFolder = directoryContainsSvnFolder
         self.isDirectoryCleanRepoCandidate = isDirectoryCleanRepoCandidate
         self.language = language
     }
@@ -318,7 +357,7 @@ public enum MenuVisibilityResolver {
         // Outside any monitored repository
         guard let repo = context.matchedRepo else {
             var items: [ResolvedMenuItem] = []
-            if context.directoryContainsGitFolder {
+            if context.directoryContainsGitFolder || context.directoryContainsSvnFolder {
                 items.append(.item(action: .addRepository, title: loc.string("menu.addRepository")))
             }
             items.append(.item(action: .gitClone, title: loc.string("menu.gitClone")))
@@ -326,15 +365,17 @@ public enum MenuVisibilityResolver {
                 items.append(.item(action: .gitInit, title: loc.string("menu.gitInit")))
             }
             items.append(.separator)
+            items.append(.item(action: .svnCheckout, title: loc.string("menu.svnCheckout")))
+            if context.isDirectoryCleanRepoCandidate {
+                items.append(.item(action: .svnCreateRepo, title: loc.string("menu.svnCreateRepo")))
+            }
+            items.append(.item(action: .svnImport, title: loc.string("menu.svnImport")))
+            items.append(.separator)
             items.append(.item(action: .showApp, title: loc.string("menu.showApp")))
             return items
         }
 
-        // Inside a monitored Git repository
-        let branchName = context.snapshot?.branchName ?? ""
-        let repoState = context.snapshot?.repoState ?? .normal
         let paths = context.selectedPaths.isEmpty ? [context.targetDirectoryPath] : context.selectedPaths
-
         let statuses: [VcsFileStatus] = paths.map { path in
             context.snapshot?.status(forAbsolutePath: path) ?? .normal
         }
@@ -350,6 +391,150 @@ public enum MenuVisibilityResolver {
             // If file does not exist (e.g. deleted file or unit test), treat non-repo-root as file candidate
             return PathUtils.normalize(p) == repo.path ? nil : p
         }()
+
+        switch repo.vcsType {
+        case .svn:
+            return resolveSvnMenu(
+                repo: repo,
+                context: context,
+                paths: paths,
+                statuses: statuses,
+                singleFileSelected: singleFileSelected,
+                forToolbar: forToolbar,
+                loc: loc
+            )
+        case .git:
+            return resolveGitMenu(
+                repo: repo,
+                context: context,
+                paths: paths,
+                statuses: statuses,
+                singleFileSelected: singleFileSelected,
+                forToolbar: forToolbar,
+                loc: loc
+            )
+        }
+    }
+
+    private static func resolveSvnMenu(
+        repo: RepositoryEntry,
+        context: MenuResolutionContext,
+        paths: [String],
+        statuses: [VcsFileStatus],
+        singleFileSelected: String?,
+        forToolbar: Bool,
+        loc: Localization
+    ) -> [ResolvedMenuItem] {
+        let branchName = context.snapshot?.branchName ?? ""
+        let hasUntracked = statuses.contains(.untracked)
+        let hasTrackedOrChanged = statuses.contains { $0 != .untracked && $0 != .ignored }
+        let hasRevertible = statuses.contains { $0 != .normal && $0 != .untracked && $0 != .ignored }
+        let hasConflicts = statuses.contains(.unmerged)
+        let isRepoRootSelected = paths.count == 1 && PathUtils.normalize(paths[0]) == repo.path
+
+        var items: [ResolvedMenuItem] = []
+
+        items.append(.item(action: .svnUpdate, title: loc.string("menu.svnUpdate")))
+        items.append(.item(action: .svnUpdateToRevision, title: loc.string("menu.svnUpdateToRevision")))
+
+        let commitTitle = branchName.isEmpty
+            ? loc.string("menu.svnCommit")
+            : String(format: loc.string("menu.svnCommitBranch"), branchName)
+        items.append(.item(action: .svnCommit, title: commitTitle))
+
+        if !forToolbar, let file = singleFileSelected {
+            let status = context.snapshot?.status(forAbsolutePath: file) ?? .normal
+            if status != .untracked && status != .ignored {
+                items.append(.item(action: .diff, title: loc.string("menu.diff")))
+                items.append(.item(action: .diffPrevious, title: loc.string("menu.diffPrev")))
+            }
+            items.append(.item(action: .diffLater, title: loc.string("menu.diffLater")))
+            if let later = context.diffLaterState, PathUtils.normalize(later.filePath) != PathUtils.normalize(file) {
+                items.append(.item(
+                    action: .diffWithLater,
+                    title: String(format: loc.string("menu.diffWithLater"), later.fileName)
+                ))
+            }
+        } else if !forToolbar && hasTrackedOrChanged {
+            items.append(.item(action: .diff, title: loc.string("menu.diff")))
+        }
+
+        items.append(.separator)
+        items.append(.item(action: .showLog, title: loc.string("menu.showLog")))
+        items.append(.item(action: .checkForModifications, title: loc.string("menu.checkModifications")))
+        items.append(.item(action: .repoBrowser, title: loc.string("menu.repoBrowser")))
+        items.append(.item(action: .svnInfo, title: loc.string("menu.svnInfo")))
+
+        items.append(.separator)
+        if hasConflicts {
+            items.append(.item(action: .resolveConflicts, title: loc.string("menu.resolve")))
+        }
+        if hasRevertible || !forToolbar {
+            items.append(.item(action: .revert, title: loc.string("menu.revert")))
+        }
+
+        if !forToolbar {
+            if hasUntracked {
+                items.append(.item(action: .add, title: loc.string("menu.add")))
+            }
+            if hasUntracked || hasTrackedOrChanged {
+                items.append(.item(action: .addToIgnore, title: loc.string("menu.addToIgnore")))
+            }
+            if hasTrackedOrChanged && !isRepoRootSelected {
+                items.append(.item(action: .delete, title: loc.string("menu.delete")))
+                items.append(.item(action: .deleteKeepLocal, title: loc.string("menu.deleteKeepLocal")))
+                if context.selectedPaths.count == 1 {
+                    items.append(.item(action: .rename, title: loc.string("menu.rename")))
+                    items.append(.item(action: .svnMove, title: loc.string("menu.svnMove")))
+                }
+            }
+            if singleFileSelected != nil {
+                items.append(.item(action: .blame, title: loc.string("menu.blame")))
+            }
+        }
+
+        items.append(.separator)
+        items.append(.item(action: .svnBranchTag, title: loc.string("menu.svnBranchTag")))
+        items.append(.item(action: .svnSwitch, title: loc.string("menu.svnSwitch")))
+        items.append(.item(action: .svnMerge, title: loc.string("menu.svnMerge")))
+        items.append(.item(action: .compareRevisions, title: loc.string("menu.compareRevisions")))
+        items.append(.item(action: .export, title: loc.string("menu.export")))
+
+        items.append(.separator)
+        items.append(.item(action: .svnLock, title: loc.string("menu.svnLock")))
+        items.append(.item(action: .svnUnlock, title: loc.string("menu.svnUnlock")))
+        items.append(.item(action: .svnProperties, title: loc.string("menu.svnProperties")))
+
+        items.append(.separator)
+        items.append(.item(action: .svnCreatePatch, title: loc.string("menu.svnCreatePatch")))
+        items.append(.item(action: .svnApplyPatch, title: loc.string("menu.svnApplyPatch")))
+        items.append(.item(action: .svnRelocate, title: loc.string("menu.svnRelocate")))
+        items.append(.item(action: .svnImport, title: loc.string("menu.svnImport")))
+
+        items.append(.separator)
+        items.append(.item(action: .svnCleanup, title: loc.string("menu.svnCleanup")))
+        items.append(.item(action: .svnUpgrade, title: loc.string("menu.svnUpgrade")))
+        items.append(.item(action: .refresh, title: loc.string("menu.refresh")))
+        if isRepoRootSelected {
+            items.append(.item(action: .excludeRepository, title: loc.string("menu.excludeRepository")))
+        }
+        items.append(.item(action: .showApp, title: loc.string("menu.showApp")))
+
+        return items
+    }
+
+    private static func resolveGitMenu(
+        repo: RepositoryEntry,
+        context: MenuResolutionContext,
+        paths: [String],
+        statuses: [VcsFileStatus],
+        singleFileSelected: String?,
+        forToolbar: Bool,
+        loc: Localization
+    ) -> [ResolvedMenuItem] {
+        // Inside a monitored Git repository
+        let branchName = context.snapshot?.branchName ?? ""
+        let repoState = context.snapshot?.repoState ?? .normal
 
         let hasUntracked = statuses.contains(.untracked)
         let hasTrackedOrChanged = statuses.contains { $0 != .untracked && $0 != .ignored }

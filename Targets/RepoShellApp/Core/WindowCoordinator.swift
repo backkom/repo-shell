@@ -143,6 +143,10 @@ final class WindowCoordinator {
 
         case .gitCommit:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnCommit, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             presentWindow(
                 key: "commit-\(repo)",
                 title: L("Git Commit", "Git 提交") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
@@ -153,6 +157,10 @@ final class WindowCoordinator {
 
         case .gitPull:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnUpdate, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             presentWindow(
                 key: "pull-\(repo)",
                 title: L("Git Pull", "Git 拉取") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
@@ -181,23 +189,37 @@ final class WindowCoordinator {
         case .showLog:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
             let filterPath = selectedPaths.count == 1 && PathUtils.normalize(selectedPaths[0]) != repo ? selectedPaths[0] : nil
-            presentWindow(
-                key: "log-\(repo)-\(filterPath ?? "")",
-                title: L("Show Log", "显示日志") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
-                size: NSSize(width: 960, height: 680),
-                autosave: "LogWindow",
-                view: LogWindowView(repoPath: repo, initialPathFilter: filterPath)
-            )
+            if vcsType(for: repo) == .svn {
+                openSvnLog(repoPath: repo, target: filterPath)
+            } else {
+                presentWindow(
+                    key: "log-\(repo)-\(filterPath ?? "")",
+                    title: L("Show Log", "显示日志") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 960, height: 680),
+                    autosave: "LogWindow",
+                    view: LogWindowView(repoPath: repo, initialPathFilter: filterPath)
+                )
+            }
 
         case .checkForModifications:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            presentWindow(
-                key: "modifications-\(repo)",
-                title: L("Check for Modifications", "检测改动") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
-                size: NSSize(width: 840, height: 560),
-                autosave: "ModificationsWindow",
-                view: ModificationsWindowView(repoPath: repo)
-            )
+            if vcsType(for: repo) == .svn {
+                presentWindow(
+                    key: "svn-modifications-\(repo)",
+                    title: L("Check for Modifications", "检测改动") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 860, height: 560),
+                    autosave: "SvnModificationsWindow",
+                    view: SvnModificationsWindowView(repoPath: repo)
+                )
+            } else {
+                presentWindow(
+                    key: "modifications-\(repo)",
+                    title: L("Check for Modifications", "检测改动") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 840, height: 560),
+                    autosave: "ModificationsWindow",
+                    view: ModificationsWindowView(repoPath: repo)
+                )
+            }
 
         case .browseReferences:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
@@ -228,33 +250,50 @@ final class WindowCoordinator {
 
         case .repoBrowser:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            presentWindow(
-                key: "browser-\(repo)",
-                title: L("Repo-browser", "版本库浏览器") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
-                size: NSSize(width: 820, height: 560),
-                view: RepoBrowserWindowView(repoPath: repo)
-            )
+            openRepoBrowser(repoPath: repo, revision: "HEAD")
 
         case .resolveConflicts:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            presentWindow(
-                key: "resolve-\(repo)",
-                title: L("Resolve Conflicts", "解决冲突") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
-                size: NSSize(width: 680, height: 460),
-                view: ResolveWindowView(repoPath: repo)
-            )
+            if vcsType(for: repo) == .svn {
+                presentWindow(
+                    key: "svn-resolve-\(repo)",
+                    title: L("Resolve Conflicts", "解决冲突") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 680, height: 460),
+                    view: SvnResolveConflictsWindowView(repoPath: repo, preselectedPaths: selectedPaths)
+                )
+            } else {
+                presentWindow(
+                    key: "resolve-\(repo)",
+                    title: L("Resolve Conflicts", "解决冲突") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 680, height: 460),
+                    view: ResolveWindowView(repoPath: repo)
+                )
+            }
 
         case .revert:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            presentWindow(
-                key: "revert-\(repo)",
-                title: L("Revert", "复原") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
-                size: NSSize(width: 680, height: 460),
-                view: RevertWindowView(repoPath: repo, preselectedPaths: selectedPaths)
-            )
+            if vcsType(for: repo) == .svn {
+                presentWindow(
+                    key: "svn-revert-\(repo)",
+                    title: L("SVN Revert", "SVN 复原") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 660, height: 440),
+                    view: SvnRevertWindowView(repoPath: repo, preselectedPaths: selectedPaths)
+                )
+            } else {
+                presentWindow(
+                    key: "revert-\(repo)",
+                    title: L("Revert", "复原") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 680, height: 460),
+                    view: RevertWindowView(repoPath: repo, preselectedPaths: selectedPaths)
+                )
+            }
 
         case .checkout:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnSwitch, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             presentWindow(
                 key: "checkout-\(repo)",
                 title: L("Checkout / Switch", "签出 / 切换") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
@@ -264,6 +303,10 @@ final class WindowCoordinator {
 
         case .createBranch:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnBranchTag, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             presentWindow(
                 key: "create-branch-\(repo)",
                 title: L("Create Branch", "创建分支") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
@@ -273,6 +316,10 @@ final class WindowCoordinator {
 
         case .createTag:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnBranchTag, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             presentWindow(
                 key: "create-tag-\(repo)",
                 title: L("Create Tag", "创建标签") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
@@ -282,6 +329,10 @@ final class WindowCoordinator {
 
         case .merge:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnMerge, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             presentWindow(
                 key: "merge-\(repo)",
                 title: L("Merge", "合并") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
@@ -311,17 +362,45 @@ final class WindowCoordinator {
 
         case .export:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            presentWindow(
-                key: "export-\(repo)",
-                title: L("Export", "导出") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
-                size: NSSize(width: 500, height: 300),
-                view: ExportWindowView(repoPath: repo)
-            )
+            if vcsType(for: repo) == .svn {
+                let source = selectedPaths.first ?? repo
+                openSvnExport(source: source, repoPath: repo, revision: "WORKING")
+            } else {
+                presentWindow(
+                    key: "export-\(repo)",
+                    title: L("Export", "导出") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                    size: NSSize(width: 500, height: 300),
+                    view: ExportWindowView(repoPath: repo)
+                )
+            }
 
         case .diff:
-            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths),
-                  let file = selectedPaths.first else { return }
-            openDiffWithRevision(repoPath: repo, filePath: file, revision: "HEAD", rightTitle: L("Working Tree", "工作区"))
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                let target = selectedPaths.first ?? targetDir
+                var isDir: ObjCBool = false
+                if FileManager.default.fileExists(atPath: target, isDirectory: &isDir), isDir.boolValue {
+                    Task {
+                        do {
+                            let diff = try await container.svnProvider.diffText(repoPath: repo, paths: selectedPaths)
+                            if diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                AlertHelper.showInfo(L("No Differences", "无差异"), message: L("No textual changes found in selected folder.", "所选目录没有文本差异。"))
+                            } else {
+                                let tmp = FileManager.default.temporaryDirectory
+                                    .appendingPathComponent("svn-diff-\(UUID().uuidString.prefix(6)).diff")
+                                try diff.write(to: tmp, atomically: true, encoding: .utf8)
+                                NSWorkspace.shared.open(tmp)
+                            }
+                        } catch {
+                            AlertHelper.showError(error)
+                        }
+                    }
+                } else {
+                    openDiffWithRevision(repoPath: repo, filePath: target, revision: "BASE", rightTitle: L("Working Copy", "工作副本"))
+                }
+            } else if let file = selectedPaths.first {
+                openDiffWithRevision(repoPath: repo, filePath: file, revision: "HEAD", rightTitle: L("Working Tree", "工作区"))
+            }
 
         case .diffPrevious:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths),
@@ -339,48 +418,84 @@ final class WindowCoordinator {
 
         case .add:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            runTaskWithProgress(title: L("Git Add", "添加文件"), repoPath: repo) { _ in
-                try await container.gitProvider.add(repoPath: repo, paths: selectedPaths)
+            let isSvn = vcsType(for: repo) == .svn
+            runTaskWithProgress(title: isSvn ? L("SVN Add", "SVN 添加") : L("Git Add", "添加文件"), repoPath: repo) { _ in
+                if isSvn {
+                    return try await container.svnProvider.add(repoPath: repo, paths: selectedPaths)
+                }
+                return try await container.gitProvider.add(repoPath: repo, paths: selectedPaths)
             }
 
         case .delete:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            let isSvn = vcsType(for: repo) == .svn
             if AlertHelper.confirm(
                 title: L("Delete Files", "删除文件"),
-                message: L("Remove selected files from Git and working directory?", "确定要从 Git 和工作区删除所选文件吗？")
+                message: isSvn
+                    ? L("Schedule selected items for SVN deletion and remove local copies?", "确定从 SVN 版本控制和本地工作副本删除所选文件吗？")
+                    : L("Remove selected files from Git and working directory?", "确定要从 Git 和工作区删除所选文件吗？")
             ) {
                 runTaskWithProgress(title: L("Delete", "删除"), repoPath: repo) { _ in
-                    try await container.gitProvider.remove(repoPath: repo, paths: selectedPaths, keepLocal: false)
+                    if isSvn {
+                        return try await container.svnProvider.remove(repoPath: repo, paths: selectedPaths, keepLocal: false)
+                    }
+                    return try await container.gitProvider.remove(repoPath: repo, paths: selectedPaths, keepLocal: false)
                 }
             }
 
         case .deleteKeepLocal:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            let isSvn = vcsType(for: repo) == .svn
             runTaskWithProgress(title: L("Delete (Keep Local)", "删除（保留本地拷贝）"), repoPath: repo) { _ in
-                try await container.gitProvider.remove(repoPath: repo, paths: selectedPaths, keepLocal: true)
+                if isSvn {
+                    return try await container.svnProvider.remove(repoPath: repo, paths: selectedPaths, keepLocal: true)
+                }
+                return try await container.gitProvider.remove(repoPath: repo, paths: selectedPaths, keepLocal: true)
             }
 
         case .rename:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths),
                   let file = selectedPaths.first else { return }
-            presentWindow(
-                key: "rename-\(file)",
-                title: L("Rename", "重命名"),
-                size: NSSize(width: 460, height: 180),
-                view: RenameWindowView(repoPath: repo, sourcePath: file)
-            )
+            if vcsType(for: repo) == .svn {
+                presentWindow(
+                    key: "svn-move-\(file)",
+                    title: L("SVN Rename", "SVN 重命名"),
+                    size: NSSize(width: 480, height: 220),
+                    view: SvnMoveRenameWindowView(repoPath: repo, sourcePath: file, isMove: false)
+                )
+            } else {
+                presentWindow(
+                    key: "rename-\(file)",
+                    title: L("Rename", "重命名"),
+                    size: NSSize(width: 460, height: 180),
+                    view: RenameWindowView(repoPath: repo, sourcePath: file)
+                )
+            }
 
         case .addToIgnore:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            presentWindow(
-                key: "ignore-\(repo)",
-                title: L("Add to Ignore List", "添加到忽略清单"),
-                size: NSSize(width: 480, height: 240),
-                view: IgnoreWindowView(repoPath: repo, targetPaths: selectedPaths)
-            )
+            if vcsType(for: repo) == .svn {
+                presentWindow(
+                    key: "svn-ignore-\(repo)",
+                    title: L("Add to Ignore List", "添加到忽略清单"),
+                    size: NSSize(width: 500, height: 260),
+                    view: SvnAddToIgnoreWindowView(repoPath: repo, targetPaths: selectedPaths)
+                )
+            } else {
+                presentWindow(
+                    key: "ignore-\(repo)",
+                    title: L("Add to Ignore List", "添加到忽略清单"),
+                    size: NSSize(width: 480, height: 240),
+                    view: IgnoreWindowView(repoPath: repo, targetPaths: selectedPaths)
+                )
+            }
 
         case .repoInfo:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnInfo, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             presentWindow(
                 key: "info-\(repo)",
                 title: L("Repo Info", "版本库信息") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
@@ -390,6 +505,10 @@ final class WindowCoordinator {
 
         case .cleanup:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if vcsType(for: repo) == .svn {
+                dispatch(action: .svnCleanup, repoPath: repo, targetDir: targetDir, selectedPaths: selectedPaths)
+                return
+            }
             runTaskWithProgress(title: L("Cleanup (git gc)", "清理 (git gc)"), repoPath: repo) { _ in
                 try await container.gitProvider.cleanup(repoPath: repo)
             }
@@ -423,22 +542,26 @@ final class WindowCoordinator {
 
         case .compareRevisions:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
-            presentWindow(
-                key: "compare-\(repo)",
-                title: L("Compare Revisions", "比较版本") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
-                size: NSSize(width: 780, height: 540),
-                view: CompareRevisionsWindowView(repoPath: repo)
-            )
+            openCompareRevisions(repoPath: repo, rev1: vcsType(for: repo) == .svn ? "1" : "HEAD~1", rev2: "HEAD")
 
         case .blame:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths),
                   let file = selectedPaths.first else { return }
-            presentWindow(
-                key: "blame-dlg-\(file)",
-                title: L("Git Blame", "Git 追溯"),
-                size: NSSize(width: 460, height: 240),
-                view: BlameDialogView(repoPath: repo, filePath: file)
-            )
+            if vcsType(for: repo) == .svn {
+                presentWindow(
+                    key: "blame-dlg-\(file)",
+                    title: L("SVN Blame", "SVN 追溯"),
+                    size: NSSize(width: 460, height: 240),
+                    view: SvnBlameDialogView(repoPath: repo, filePath: file)
+                )
+            } else {
+                presentWindow(
+                    key: "blame-dlg-\(file)",
+                    title: L("Git Blame", "Git 追溯"),
+                    size: NSSize(width: 460, height: 240),
+                    view: BlameDialogView(repoPath: repo, filePath: file)
+                )
+            }
 
         case .submoduleAdd:
             guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
@@ -467,8 +590,192 @@ final class WindowCoordinator {
                 view: SubmodulesWindowView(repoPath: repo)
             )
 
-        default:
-            AlertHelper.showInfo(L("Coming in V2", "V2 即将支持"), message: L("SVN operations will be enabled in V2.", "SVN 操作将在 V2 版本启用。"))
+        // MARK: - V2 SVN Explicit Actions
+
+        case .svnCommit:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-commit-\(repo)",
+                title: L("SVN Commit", "SVN 提交") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 820, height: 600),
+                autosave: "SvnCommitWindow",
+                view: SvnCommitWindowView(repoPath: repo, preselectedPaths: selectedPaths)
+            )
+
+        case .svnCheckout:
+            openSvnCheckout(parentDir: targetDir)
+
+        case .svnCreateRepo:
+            let dir = selectedPaths.first ?? targetDir
+            presentWindow(
+                key: "svn-create-\(dir)",
+                title: L("Create SVN Repository", "创建 SVN 版本库"),
+                size: NSSize(width: 500, height: 240),
+                view: SvnCreateRepoWindowView(initialPath: dir)
+            )
+
+        case .svnImport:
+            let dir = selectedPaths.first ?? targetDir
+            presentWindow(
+                key: "svn-import-\(dir)",
+                title: L("SVN Import", "SVN 导入"),
+                size: NSSize(width: 540, height: 320),
+                view: SvnImportWindowView(initialLocalPath: dir)
+            )
+
+        case .svnUpdate:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            let updateTargets = selectedPaths.isEmpty ? [targetDir] : selectedPaths
+            runTaskWithProgress(
+                title: L("SVN Update", "SVN 更新") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                repoPath: repo
+            ) { onLine in
+                try await container.runSvnInteractive(repoPath: repo) { env, auth in
+                    try await container.svnProvider.update(
+                        repoPath: repo,
+                        options: SvnUpdateOptions(paths: updateTargets),
+                        environment: env,
+                        auth: auth,
+                        onOutputLine: { line, _ in onLine(line) }
+                    )
+                }
+            }
+
+        case .svnUpdateToRevision:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-uprev-\(repo)",
+                title: L("Update to Revision", "更新至指定版本") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 520, height: 390),
+                view: SvnUpdateToRevisionWindowView(repoPath: repo, selectedPaths: selectedPaths)
+            )
+
+        case .svnBranchTag:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-branch-\(repo)",
+                title: L("SVN Branch / Tag", "SVN 分支 / 标签") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 560, height: 420),
+                view: SvnBranchTagWindowView(repoPath: repo)
+            )
+
+        case .svnSwitch:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-switch-\(repo)",
+                title: L("SVN Switch", "SVN 切换") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 540, height: 350),
+                view: SvnSwitchWindowView(repoPath: repo)
+            )
+
+        case .svnMerge:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-merge-\(repo)",
+                title: L("SVN Merge", "SVN 合并") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 600, height: 500),
+                view: SvnMergeWindowView(repoPath: repo)
+            )
+
+        case .svnMove:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths),
+                  let src = selectedPaths.first else { return }
+            presentWindow(
+                key: "svn-move-\(src)",
+                title: L("SVN Move", "SVN 移动"),
+                size: NSSize(width: 480, height: 220),
+                view: SvnMoveRenameWindowView(repoPath: repo, sourcePath: src, isMove: true)
+            )
+
+        case .svnCleanup:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-cleanup-\(repo)",
+                title: L("SVN Clean up", "SVN 清理") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 520, height: 310),
+                view: SvnCleanupWindowView(repoPath: repo, targetPaths: selectedPaths)
+            )
+
+        case .svnInfo:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            let target = selectedPaths.first ?? repo
+            presentWindow(
+                key: "svn-info-\(target)",
+                title: L("SVN Info", "SVN 信息") + " — \(URL(fileURLWithPath: target).lastPathComponent)",
+                size: NSSize(width: 620, height: 470),
+                view: SvnInfoWindowView(repoPath: repo, targetPath: target)
+            )
+
+        case .svnUpgrade:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            if AlertHelper.confirm(
+                title: L("Upgrade Working Copy", "升级工作副本"),
+                message: L("Upgrade working copy metadata format to match your installed Subversion version?", "确定要升级此工作副本格式以匹配当前 Subversion 版本吗？")
+            ) {
+                runTaskWithProgress(title: L("SVN Upgrade", "SVN 升级工作副本"), repoPath: repo) { onLine in
+                    try await container.svnProvider.upgradeWorkingCopy(
+                        repoPath: repo,
+                        onOutputLine: { line, _ in onLine(line) }
+                    )
+                }
+            }
+
+        case .svnLock:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            let targets = selectedPaths.isEmpty ? [targetDir] : selectedPaths
+            presentWindow(
+                key: "svn-lock-\(repo)",
+                title: L("Get Lock", "获取锁") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 480, height: 230),
+                view: SvnLockUnlockWindowView(repoPath: repo, targetPaths: targets, isUnlock: false)
+            )
+
+        case .svnUnlock:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            let targets = selectedPaths.isEmpty ? [targetDir] : selectedPaths
+            presentWindow(
+                key: "svn-unlock-\(repo)",
+                title: L("Release Lock", "释放锁") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 480, height: 210),
+                view: SvnLockUnlockWindowView(repoPath: repo, targetPaths: targets, isUnlock: true)
+            )
+
+        case .svnProperties:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            let target = selectedPaths.first ?? repo
+            presentWindow(
+                key: "svn-props-\(target)",
+                title: L("SVN Properties", "SVN 属性") + " — \(URL(fileURLWithPath: target).lastPathComponent)",
+                size: NSSize(width: 680, height: 460),
+                view: SvnPropertiesWindowView(repoPath: repo, target: target)
+            )
+
+        case .svnRelocate:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-relocate-\(repo)",
+                title: L("SVN Relocate", "SVN 重定位") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 520, height: 220),
+                view: SvnRelocateWindowView(repoPath: repo)
+            )
+
+        case .svnCreatePatch:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-mkpatch-\(repo)",
+                title: L("Create Patch", "创建补丁") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 520, height: 230),
+                view: SvnCreatePatchWindowView(repoPath: repo, targetPaths: selectedPaths)
+            )
+
+        case .svnApplyPatch:
+            guard let repo = resolveRepo(repoPath, targetDir: targetDir, selectedPaths: selectedPaths) else { return }
+            presentWindow(
+                key: "svn-appatch-\(repo)",
+                title: L("Apply Patch", "应用补丁") + " — \(URL(fileURLWithPath: repo).lastPathComponent)",
+                size: NSSize(width: 520, height: 270),
+                view: SvnApplyPatchWindowView(repoPath: repo)
+            )
         }
     }
 
@@ -540,7 +847,15 @@ final class WindowCoordinator {
         )
     }
 
-    func openBlameResult(repoPath: String, filePath: String, revision: String, ignoreWhitespace: Bool, hideAuthorAndDate: Bool) {
+    func openBlameResult(
+        repoPath: String,
+        filePath: String,
+        revision: String,
+        ignoreWhitespace: Bool,
+        hideAuthorAndDate: Bool,
+        vcsType: VcsType? = nil
+    ) {
+        let resolvedType = vcsType ?? self.vcsType(for: repoPath)
         presentWindow(
             key: "blame-res-\(filePath)-\(revision)",
             title: L("Blame", "追溯") + ": \(URL(fileURLWithPath: filePath).lastPathComponent) (\(revision))",
@@ -550,7 +865,8 @@ final class WindowCoordinator {
                 filePath: filePath,
                 revision: revision,
                 ignoreWhitespace: ignoreWhitespace,
-                hideAuthorAndDate: hideAuthorAndDate
+                hideAuthorAndDate: hideAuthorAndDate,
+                vcsType: resolvedType
             )
         )
     }
@@ -568,20 +884,68 @@ final class WindowCoordinator {
     }
 
     func openCompareRevisions(repoPath: String, rev1: String, rev2: String) {
-        presentWindow(
-            key: "compare-\(repoPath)-\(rev1)-\(rev2)",
-            title: L("Compare Revisions", "比较版本") + " — \(rev1.prefix(7)) ↔ \(rev2.prefix(7))",
-            size: NSSize(width: 780, height: 540),
-            view: CompareRevisionsWindowView(repoPath: repoPath, initialRev1: rev1, initialRev2: rev2)
-        )
+        if vcsType(for: repoPath) == .svn {
+            presentWindow(
+                key: "svn-compare-\(repoPath)-\(rev1)-\(rev2)",
+                title: L("Compare Revisions", "比较版本") + " — r\(rev1) ↔ r\(rev2)",
+                size: NSSize(width: 780, height: 540),
+                view: SvnCompareRevisionsWindowView(repoPath: repoPath, initialRev1: rev1, initialRev2: rev2)
+            )
+        } else {
+            presentWindow(
+                key: "compare-\(repoPath)-\(rev1)-\(rev2)",
+                title: L("Compare Revisions", "比较版本") + " — \(rev1.prefix(7)) ↔ \(rev2.prefix(7))",
+                size: NSSize(width: 780, height: 540),
+                view: CompareRevisionsWindowView(repoPath: repoPath, initialRev1: rev1, initialRev2: rev2)
+            )
+        }
     }
 
     func openRepoBrowser(repoPath: String, revision: String) {
+        if vcsType(for: repoPath) == .svn {
+            presentWindow(
+                key: "svn-browser-\(repoPath)-\(revision)",
+                title: L("Repo-browser", "版本库浏览器") + " (\(revision))",
+                size: NSSize(width: 860, height: 580),
+                view: SvnRepoBrowserWindowView(repoPath: repoPath, initialRevision: revision)
+            )
+        } else {
+            presentWindow(
+                key: "browser-\(repoPath)-\(revision)",
+                title: L("Repo-browser", "版本库浏览器") + " (\(revision))",
+                size: NSSize(width: 820, height: 560),
+                view: RepoBrowserWindowView(repoPath: repoPath, initialRevision: revision)
+            )
+        }
+    }
+
+    func openSvnLog(repoPath: String?, target: String?) {
+        let base = repoPath ?? target ?? ""
         presentWindow(
-            key: "browser-\(repoPath)-\(revision)",
-            title: L("Repo-browser", "版本库浏览器") + " (\(revision))",
-            size: NSSize(width: 820, height: 560),
-            view: RepoBrowserWindowView(repoPath: repoPath, initialRevision: revision)
+            key: "svn-log-\(base)-\(target ?? "")",
+            title: L("Show Log", "显示日志") + (repoPath.map { " — \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? ""),
+            size: NSSize(width: 960, height: 680),
+            autosave: "SvnLogWindow",
+            view: SvnLogWindowView(repoPath: base, initialPathFilter: target)
+        )
+    }
+
+    func openSvnCheckout(parentDir: String? = nil, initialURL: String = "") {
+        let dir = parentDir ?? FileManager.default.homeDirectoryForCurrentUser.path
+        presentWindow(
+            key: "svn-checkout-\(dir)",
+            title: L("SVN Checkout", "SVN 签出"),
+            size: NSSize(width: 560, height: 420),
+            view: SvnCheckoutWindowView(initialParentDir: dir, initialURL: initialURL)
+        )
+    }
+
+    func openSvnExport(source: String, repoPath: String? = nil, revision: String = "WORKING") {
+        presentWindow(
+            key: "svn-export-\(source)",
+            title: L("SVN Export", "SVN 导出"),
+            size: NSSize(width: 520, height: 320),
+            view: SvnExportWindowView(sourcePathOrURL: source, repoPath: repoPath, initialRevision: revision)
         )
     }
 
@@ -606,13 +970,28 @@ final class WindowCoordinator {
     // MARK: - Diff & Task Helpers
 
     func openDiffWithRevision(repoPath: String, filePath: String, revision: String, rightTitle: String) {
+        let isSvn = vcsType(for: repoPath) == .svn
         Task {
             let ext = URL(fileURLWithPath: filePath).pathExtension
             let name = URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent
+            let suffix = ext.isEmpty ? "" : ".\(ext)"
             let tempFile = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(name)_\(revision.prefix(7))_\(UUID().uuidString.prefix(6)).\(ext)")
+                .appendingPathComponent("\(name)_\(revision.prefix(7))_\(UUID().uuidString.prefix(6))\(suffix)")
             do {
-                try await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: filePath, revision: revision, to: tempFile.path)
+                if isSvn {
+                    try await AppContainer.shared.runSvnInteractive(repoPath: repoPath) { env, auth in
+                        try await AppContainer.shared.svnProvider.extractFile(
+                            repoPath: repoPath,
+                            path: filePath,
+                            revision: revision,
+                            to: tempFile.path,
+                            environment: env,
+                            auth: auth
+                        )
+                    }
+                } else {
+                    try await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: filePath, revision: revision, to: tempFile.path)
+                }
                 launchDiffFiles(leftPath: tempFile.path, rightPath: filePath, leftTitle: revision, rightTitle: rightTitle)
             } catch {
                 AlertHelper.showError(error)
@@ -621,16 +1000,39 @@ final class WindowCoordinator {
     }
 
     func openDiffBetweenRevisions(repoPath: String, filePath: String, leftRev: String, rightRev: String) {
+        let isSvn = vcsType(for: repoPath) == .svn
         Task {
             let ext = URL(fileURLWithPath: filePath).pathExtension
             let name = URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent
+            let suffix = ext.isEmpty ? "" : ".\(ext)"
             let tempLeft = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(name)_\(leftRev.prefix(7))_\(UUID().uuidString.prefix(6)).\(ext)")
+                .appendingPathComponent("\(name)_\(leftRev.prefix(7))_\(UUID().uuidString.prefix(6))\(suffix)")
             let tempRight = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(name)_\(rightRev.prefix(7))_\(UUID().uuidString.prefix(6)).\(ext)")
+                .appendingPathComponent("\(name)_\(rightRev.prefix(7))_\(UUID().uuidString.prefix(6))\(suffix)")
             do {
-                try await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: filePath, revision: leftRev, to: tempLeft.path)
-                try await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: filePath, revision: rightRev, to: tempRight.path)
+                if isSvn {
+                    try await AppContainer.shared.runSvnInteractive(repoPath: repoPath) { env, auth in
+                        try await AppContainer.shared.svnProvider.extractFile(
+                            repoPath: repoPath,
+                            path: filePath,
+                            revision: leftRev,
+                            to: tempLeft.path,
+                            environment: env,
+                            auth: auth
+                        )
+                        try await AppContainer.shared.svnProvider.extractFile(
+                            repoPath: repoPath,
+                            path: filePath,
+                            revision: rightRev,
+                            to: tempRight.path,
+                            environment: env,
+                            auth: auth
+                        )
+                    }
+                } else {
+                    try await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: filePath, revision: leftRev, to: tempLeft.path)
+                    try await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: filePath, revision: rightRev, to: tempRight.path)
+                }
                 launchDiffFiles(leftPath: tempLeft.path, rightPath: tempRight.path, leftTitle: leftRev, rightTitle: rightRev)
             } catch {
                 AlertHelper.showError(error)
@@ -639,7 +1041,17 @@ final class WindowCoordinator {
     }
 
     func openDiffPreviousVersion(repoPath: String, filePath: String) {
-        openDiffBetweenRevisions(repoPath: repoPath, filePath: filePath, leftRev: "HEAD~1", rightRev: "HEAD")
+        if vcsType(for: repoPath) == .svn {
+            Task {
+                if let prevRev = try? await AppContainer.shared.svnProvider.previousRevision(of: filePath, repoPath: repoPath) {
+                    openDiffBetweenRevisions(repoPath: repoPath, filePath: filePath, leftRev: prevRev, rightRev: "BASE")
+                } else {
+                    AlertHelper.showInfo(L("No Previous Version", "没有前一版本"), message: L("Could not determine an earlier SVN revision for this file.", "无法找到该文件的更早 SVN 修订版本。"))
+                }
+            }
+        } else {
+            openDiffBetweenRevisions(repoPath: repoPath, filePath: filePath, leftRev: "HEAD~1", rightRev: "HEAD")
+        }
     }
 
     func launchDiffFiles(leftPath: String, rightPath: String, leftTitle: String, rightTitle: String) {
@@ -724,5 +1136,18 @@ final class WindowCoordinator {
             return matched.path
         }
         return cfg.matchingRepository(for: targetDir)?.path
+    }
+
+    private func vcsType(for repoPath: String) -> VcsType {
+        let cfg = AppContainer.shared.repositoryManager.currentConfigSnapshot()
+        if let matched = cfg.matchingRepository(for: repoPath) {
+            return matched.vcsType
+        }
+        let svnMarker = URL(fileURLWithPath: PathUtils.normalize(repoPath)).appendingPathComponent(".svn").path
+        let gitMarker = URL(fileURLWithPath: PathUtils.normalize(repoPath)).appendingPathComponent(".git").path
+        if FileManager.default.fileExists(atPath: svnMarker) && !FileManager.default.fileExists(atPath: gitMarker) {
+            return .svn
+        }
+        return .git
     }
 }

@@ -5,6 +5,7 @@ enum MainTab: String, CaseIterable {
     case repositories
     case general
     case git
+    case svn
     case quickActions
 }
 
@@ -25,6 +26,8 @@ struct MainWindowView: View {
                     .tag(MainTab.general)
                 Label("Git", systemImage: "arrow.triangle.branch")
                     .tag(MainTab.git)
+                Label("SVN", systemImage: "server.rack")
+                    .tag(MainTab.svn)
                 Label(L("Quick Actions", "快速操作"), systemImage: "bolt.circle")
                     .tag(MainTab.quickActions)
             }
@@ -43,6 +46,8 @@ struct MainWindowView: View {
                     GeneralTabView()
                 case .git:
                     GitTabView()
+                case .svn:
+                    SvnTabView()
                 case .quickActions:
                     QuickActionsTabView()
                 }

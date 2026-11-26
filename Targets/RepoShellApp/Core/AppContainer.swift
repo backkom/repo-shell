@@ -12,6 +12,7 @@ final class AppContainer: ObservableObject {
     let storage: SharedStorage
     let repositoryManager: RepositoryManager
     let gitProvider: GitProvider
+    let svnProvider: SvnProvider
     let finderTagService: FinderTagService
     let statusEngine: StatusEngine
     let quickActionManager: QuickActionManager
@@ -26,13 +27,19 @@ final class AppContainer: ObservableObject {
     private init() {
         let storage = SharedStorage.shared
         self.storage = storage
-        self.repositoryManager = RepositoryManager(storage: storage)
         self.gitProvider = GitProvider(preferencesProvider: { storage.loadConfig().preferences })
+        self.svnProvider = SvnProvider(preferencesProvider: { storage.loadConfig().preferences })
+        self.repositoryManager = RepositoryManager(
+            storage: storage,
+            gitProvider: gitProvider,
+            svnProvider: svnProvider
+        )
         self.finderTagService = FinderTagService(storage: storage)
         self.statusEngine = StatusEngine(
             storage: storage,
             repositoryManager: repositoryManager,
             gitProvider: gitProvider,
+            svnProvider: svnProvider,
             finderTagService: finderTagService
         )
         self.quickActionManager = QuickActionManager(
@@ -70,6 +77,116 @@ final class AppContainer: ObservableObject {
 
     func authEnv(for repoPath: String?) -> [String: String] {
         authManager.environment(for: repoPath)
+    }
+
+    func svnEnv(for repoPath: String?) -> [String: String] {
+        authManager.svnEnvironment(for: repoPath)
+    }
+
+    func runSvnInteractive<T>(
+        repoPath: String?,
+        targetURL: String? = nil,
+        _ operation: @escaping @Sendable ([String: String], SvnAuthOverrides) async throws -> T
+    ) async throws -> T {
+        let env = authManager.svnEnvironment(for: repoPath)
+        var effectiveURL = targetURL
+        if effectiveURL == nil, let repoPath {
+            effectiveURL = (try? await svnProvider.info(target: repoPath, workingDirectory: repoPath))?.url
+        }
+        var auth = authManager.svnAuthOverrides(for: repoPath, targetURL: effectiveURL)
+
+        var attempts = 0
+        while true {
+            do {
+                return try await operation(env, auth)
+            } catch let error as VcsError {
+                guard case .commandFailed(_, _, let stderr, let stdout) = error else {
+                    throw error
+                }
+                attempts += 1
+                if attempts > 4 {
+                    throw error
+                }
+                switch SvnErrorClassifier.classify(stderr: stderr, stdout: stdout) {
+                case .sslCertificateUntrusted(let detail, let suggestedHost):
+                    let hostKey = suggestedHost
+                        ?? effectiveURL.flatMap { URL(string: $0)?.host }
+                        ?? ""
+                    let choice = promptSslCertificateDecision(detail: detail, host: hostKey)
+                    switch choice {
+                    case .acceptPermanently:
+                        if !hostKey.isEmpty {
+                            authManager.trustSvnHostPermanently(hostKey)
+                        }
+                        auth.trustServerCertFailures = SvnAuthOverrides.allCertFailures
+                        continue
+                    case .acceptTemporarily:
+                        auth.trustServerCertFailures = SvnAuthOverrides.allCertFailures
+                        continue
+                    case .reject:
+                        throw error
+                    }
+
+                case .authenticationRequired(let realm, let detail):
+                    let host = SvnErrorClassifier.extractHost(from: detail)
+                        ?? effectiveURL.flatMap { URL(string: $0)?.host }
+                        ?? ""
+                    let req = AskpassIPCRequest(
+                        kind: .credential,
+                        prompt: realm ?? detail,
+                        repoPath: repoPath ?? "",
+                        remoteHost: host,
+                        protocolName: "svn",
+                        defaultUsername: auth.username ?? ""
+                    )
+                    let resp = await windowCoordinator.promptAskpass(request: req)
+                    guard resp.approved else {
+                        throw VcsError.cancelled
+                    }
+                    auth.username = resp.username
+                    auth.password = resp.secret
+                    if resp.saveToKeychain {
+                        if let repoPath {
+                            let cfg = RepoAuthConfig(mode: .userPassword, username: resp.username)
+                            repositoryManager.updateAuthConfig(for: repoPath, authConfig: cfg)
+                            authManager.saveCredentials(repoPath: repoPath, authConfig: cfg, secret: resp.secret)
+                        } else if let key = effectiveURL ?? realm {
+                            authManager.saveSvnUrlCredentials(
+                                hostOrUrl: key,
+                                username: resp.username,
+                                password: resp.secret
+                            )
+                        }
+                    }
+                    continue
+
+                default:
+                    throw error
+                }
+            }
+        }
+    }
+
+    private enum SslTrustChoice {
+        case acceptPermanently
+        case acceptTemporarily
+        case reject
+    }
+
+    private func promptSslCertificateDecision(detail: String, host: String) -> SslTrustChoice {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("Untrusted SSL Certificate", "未受信任的 SSL 证书")
+        let hostLine = host.isEmpty ? "" : "Host: \(host)\n\n"
+        alert.informativeText = "\(hostLine)\(detail)"
+        alert.addButton(withTitle: L("Accept Permanently", "永久接受"))
+        alert.addButton(withTitle: L("Accept Temporarily", "临时接受"))
+        alert.addButton(withTitle: L("Reject", "拒绝"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .acceptPermanently
+        case .alertSecondButtonReturn: return .acceptTemporarily
+        default: return .reject
+        }
     }
 
     func triggerRefresh(repoPath: String?) {

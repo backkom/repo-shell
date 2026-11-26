@@ -55,6 +55,7 @@ struct BlameResultWindowView: View {
     let revision: String
     let ignoreWhitespace: Bool
     let hideAuthorAndDate: Bool
+    var vcsType: VcsType = .git
 
     @State private var lines: [VcsBlameLine] = []
     @State private var selectedLine: Int?
@@ -129,12 +130,25 @@ struct BlameResultWindowView: View {
             isLoading = true
             defer { isLoading = false }
             do {
-                lines = try await AppContainer.shared.gitProvider.blame(
-                    repoPath: repoPath,
-                    path: filePath,
-                    revision: revision,
-                    ignoreWhitespace: ignoreWhitespace
-                )
+                if vcsType == .svn {
+                    lines = try await AppContainer.shared.runSvnInteractive(repoPath: repoPath) { env, auth in
+                        try await AppContainer.shared.svnProvider.svnBlame(
+                            repoPath: repoPath,
+                            target: filePath,
+                            revision: revision == "WORKING" ? nil : revision,
+                            ignoreWhitespace: ignoreWhitespace,
+                            environment: env,
+                            auth: auth
+                        )
+                    }
+                } else {
+                    lines = try await AppContainer.shared.gitProvider.blame(
+                        repoPath: repoPath,
+                        path: filePath,
+                        revision: revision,
+                        ignoreWhitespace: ignoreWhitespace
+                    )
+                }
             } catch {
                 AlertHelper.showError(error)
             }

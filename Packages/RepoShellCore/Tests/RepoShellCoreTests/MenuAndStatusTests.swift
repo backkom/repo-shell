@@ -191,4 +191,81 @@ final class MenuAndStatusTests: XCTestCase {
         assertColoredBitmap(MenuActionIconRenderer.submenuIcon(symbolName: "shippingbox.fill"), label: "submenuIcon")
         #endif
     }
+
+    func testSvnOutsideAndInsideMenuVisibilityAndCascadePartition() throws {
+        // 6A: Outside repo with `.svn` folder shows Add Repository + Git + SVN options
+        let outsideCtx = MenuResolutionContext(
+            targetDirectoryPath: "/tmp/my-svn-wc",
+            selectedPaths: ["/tmp/my-svn-wc"],
+            matchedRepo: nil,
+            snapshot: nil,
+            diffLaterState: nil,
+            directoryContainsGitFolder: false,
+            directoryContainsSvnFolder: true,
+            isDirectoryCleanRepoCandidate: false,
+            language: .en
+        )
+        let outsideActions = MenuVisibilityResolver.resolveMenu(for: outsideCtx).compactMap { item -> MenuAction? in
+            if case .item(let action, _) = item { return action }
+            return nil
+        }
+        XCTAssertTrue(outsideActions.contains(.addRepository))
+        XCTAssertTrue(outsideActions.contains(.gitClone))
+        XCTAssertTrue(outsideActions.contains(.svnCheckout))
+        XCTAssertTrue(outsideActions.contains(.svnImport))
+        XCTAssertFalse(outsideActions.contains(.gitInit))
+        XCTAssertFalse(outsideActions.contains(.svnCreateRepo))
+
+        // Inside SVN working copy with conflicted file + 3A svnTopLevelMenuActions
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reposhell-svn-menu-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let conflictFile = dir.appendingPathComponent("main.c")
+        try "conflict".write(to: conflictFile, atomically: true, encoding: .utf8)
+
+        let repo = RepositoryEntry(path: dir.path, vcsType: .svn)
+        let snapshot = RepoStatusSnapshot(
+            repoPath: dir.path,
+            vcsType: .svn,
+            branchName: "trunk (r42)",
+            repoState: .normal,
+            fileStatuses: ["main.c": .unmerged]
+        )
+        let insideCtx = MenuResolutionContext(
+            targetDirectoryPath: dir.path,
+            selectedPaths: [conflictFile.path],
+            matchedRepo: repo,
+            snapshot: snapshot,
+            diffLaterState: nil,
+            directoryContainsGitFolder: false,
+            directoryContainsSvnFolder: true,
+            language: .en
+        )
+        let resolved = MenuVisibilityResolver.resolveMenu(for: insideCtx)
+        let items: [(MenuAction, String)] = resolved.compactMap {
+            if case .item(let action, let title) = $0 { return (action, title) }
+            return nil
+        }
+        XCTAssertTrue(items.contains(where: { $0.0 == .svnCommit && $0.1.contains("trunk (r42)") }))
+        XCTAssertTrue(items.contains(where: { $0.0 == .svnUpdate }))
+        XCTAssertTrue(items.contains(where: { $0.0 == .svnUpdateToRevision }))
+        XCTAssertTrue(items.contains(where: { $0.0 == .resolveConflicts }))
+        XCTAssertTrue(items.contains(where: { $0.0 == .svnLock }))
+        XCTAssertTrue(items.contains(where: { $0.0 == .svnUnlock }))
+        XCTAssertTrue(items.contains(where: { $0.0 == .svnProperties }))
+        XCTAssertTrue(items.contains(where: { $0.0 == .svnCleanup }))
+        XCTAssertFalse(items.contains(where: { $0.0 == .gitPush }))
+
+        let partitioned = MenuVisibilityResolver.partitionForCascade(
+            items: resolved,
+            topLevelActions: AppPreferences.defaultSvnTopLevelMenuActions
+        )
+        let topActions = partitioned.topLevel.compactMap { item -> MenuAction? in
+            if case .item(let action, _) = item { return action }
+            return nil
+        }
+        XCTAssertEqual(topActions, [.svnUpdate, .svnCommit, .showLog, .checkForModifications])
+    }
 }
