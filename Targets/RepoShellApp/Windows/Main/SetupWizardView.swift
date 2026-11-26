@@ -5,8 +5,8 @@ import RepoShellVcs
 struct SetupWizardView: View {
     let onFinish: () -> Void
 
+    @ObservedObject private var container = AppContainer.shared
     @State private var step = 0
-    @State private var extensionEnabled = false
     @State private var gitStatus = ""
     @State private var addedCount = 0
 
@@ -82,17 +82,25 @@ struct SetupWizardView: View {
             ))
             .foregroundColor(.secondary)
             HStack {
-                Image(systemName: extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundColor(extensionEnabled ? .green : .orange)
-                Text(extensionEnabled ? L("Extension enabled", "扩展已启用") : L("Waiting for extension activation", "等待启用扩展"))
-                Spacer()
-                if !extensionEnabled {
-                    Button(L("Enable Now", "一键启用")) {
-                        Task {
-                            extensionEnabled = await FinderExtensionHelper.enableNow()
+                if let extensionEnabled = container.isFinderExtensionEnabled {
+                    Image(systemName: extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundColor(extensionEnabled ? .green : .orange)
+                    Text(extensionEnabled ? L("Extension enabled", "扩展已启用") : L("Waiting for extension activation", "等待启用扩展"))
+                    Spacer()
+                    if !extensionEnabled {
+                        Button(L("Enable Now", "一键启用")) {
+                            Task {
+                                _ = await container.enableFinderExtensionNow()
+                            }
                         }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(L("Checking extension status…", "正在检查扩展状态…"))
+                        .foregroundColor(.secondary)
+                    Spacer()
                 }
                 Button(L("Check Again", "重新检测")) { checkExtension() }
                 Button(L("Open System Settings", "打开系统设置")) {
@@ -174,7 +182,7 @@ struct SetupWizardView: View {
 
     private func checkExtension() {
         Task {
-            extensionEnabled = await FinderExtensionHelper.isEnabled()
+            _ = await container.refreshFinderExtensionStatus()
         }
     }
 

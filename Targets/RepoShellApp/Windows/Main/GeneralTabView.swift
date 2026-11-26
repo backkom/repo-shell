@@ -4,11 +4,11 @@ import RepoShellVcs
 import RepoShellServices
 
 struct GeneralTabView: View {
+    @ObservedObject private var container = AppContainer.shared
     @ObservedObject private var repoManager = AppContainer.shared.repositoryManager
     @ObservedObject private var updateController = AppContainer.shared.updateController
-    @State private var extensionEnabled: Bool = false
-    @State private var installedDiffTools: [DetectedToolInfo] = []
-    @State private var installedMergeTools: [DetectedToolInfo] = []
+    @State private var installedDiffTools: [DetectedToolInfo] = AppContainer.shared.diffToolManager.detectInstalledDiffTools()
+    @State private var installedMergeTools: [DetectedToolInfo] = AppContainer.shared.diffToolManager.detectInstalledMergeTools()
     @State private var gitVersionText: String = ""
 
     var body: some View {
@@ -16,23 +16,33 @@ struct GeneralTabView: View {
             // Extension Status Banner
             Section {
                 HStack(spacing: 12) {
-                    Image(systemName: extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundColor(extensionEnabled ? .green : .orange)
-                        .font(.title2)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(extensionEnabled
-                             ? L("RepoShell Finder Extension is enabled", "RepoShell 访达扩展已启用")
-                             : L("Enable \"RepoShell Finder Extension\" under Added Extensions / File Providers in System Settings.", "请在「系统设置 → 登录项与扩展 → 已添加的扩展 / 文件提供程序」中启用“RepoShell 访达扩展”。"))
-                            .fontWeight(.medium)
-                    }
-                    Spacer()
-                    if !extensionEnabled {
-                        Button(L("Enable Now", "一键启用")) {
-                            Task {
-                                extensionEnabled = await FinderExtensionHelper.enableNow()
-                            }
+                    if let extensionEnabled = container.isFinderExtensionEnabled {
+                        Image(systemName: extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundColor(extensionEnabled ? .green : .orange)
+                            .font(.title2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(extensionEnabled
+                                 ? L("RepoShell Finder Extension is enabled", "RepoShell 访达扩展已启用")
+                                 : L("Enable \"RepoShell Finder Extension\" under Added Extensions / File Providers in System Settings.", "请在「系统设置 → 登录项与扩展 → 已添加的扩展 / 文件提供程序」中启用“RepoShell 访达扩展”。"))
+                                .fontWeight(.medium)
                         }
-                        .buttonStyle(.borderedProminent)
+                        Spacer()
+                        if !extensionEnabled {
+                            Button(L("Enable Now", "一键启用")) {
+                                Task {
+                                    _ = await container.enableFinderExtensionNow()
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    } else {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 24, height: 24)
+                        Text(L("Checking RepoShell Finder Extension status…", "正在检查 RepoShell 访达扩展状态…"))
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        Spacer()
                     }
                     Button(L("Refresh", "刷新")) {
                         checkExtensionStatus()
@@ -264,7 +274,7 @@ struct GeneralTabView: View {
 
     private func checkExtensionStatus() {
         Task {
-            extensionEnabled = await FinderExtensionHelper.isEnabled()
+            _ = await container.refreshFinderExtensionStatus()
         }
     }
 }

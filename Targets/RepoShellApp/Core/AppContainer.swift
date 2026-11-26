@@ -23,7 +23,10 @@ final class AppContainer: ObservableObject {
     let recentHistoryStore: RecentHistoryStore
     let windowCoordinator: WindowCoordinator
     let updateController: AppUpdateController
+    @Published private(set) var isFinderExtensionEnabled: Bool?
     private(set) var askpassServer: AskpassIPCServer?
+    private var extensionStatusCheckTask: Task<Bool, Never>?
+    private var extensionStatusGeneration = 0
 
     private init() {
         let storage = SharedStorage.shared
@@ -53,6 +56,7 @@ final class AppContainer: ObservableObject {
         self.recentHistoryStore = RecentHistoryStore(storage: storage)
         self.windowCoordinator = WindowCoordinator()
         self.updateController = AppUpdateController(storage: storage)
+        self.isFinderExtensionEnabled = FIFinderSyncController.isExtensionEnabled ? true : nil
     }
 
     func startBackgroundServices() {
@@ -199,6 +203,42 @@ final class AppContainer: ObservableObject {
         } else {
             statusEngine.refreshAllRepositories()
         }
+    }
+
+    @discardableResult
+    func refreshFinderExtensionStatus() async -> Bool {
+        if let existing = extensionStatusCheckTask {
+            return await existing.value
+        }
+        let generation = extensionStatusGeneration
+        let task = Task { @MainActor in
+            defer {
+                if self.extensionStatusGeneration == generation {
+                    self.extensionStatusCheckTask = nil
+                }
+            }
+            let enabled = await FinderExtensionHelper.isEnabled()
+            if !Task.isCancelled,
+               self.extensionStatusGeneration == generation,
+               self.isFinderExtensionEnabled != enabled {
+                self.isFinderExtensionEnabled = enabled
+            }
+            return enabled
+        }
+        extensionStatusCheckTask = task
+        return await task.value
+    }
+
+    @discardableResult
+    func enableFinderExtensionNow() async -> Bool {
+        extensionStatusGeneration += 1
+        extensionStatusCheckTask?.cancel()
+        extensionStatusCheckTask = nil
+        let enabled = await FinderExtensionHelper.enableNow()
+        if isFinderExtensionEnabled != enabled {
+            isFinderExtensionEnabled = enabled
+        }
+        return enabled
     }
 }
 

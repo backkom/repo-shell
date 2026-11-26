@@ -75,5 +75,15 @@ struct MainWindowView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .id(repoManager.config.preferences.language)
+        .onAppear {
+            Task {
+                _ = await AppContainer.shared.refreshFinderExtensionStatus()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task {
+                _ = await AppContainer.shared.refreshFinderExtensionStatus()
+            }
+        }
     }
 }

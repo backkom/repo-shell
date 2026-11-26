@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LocalNetworkAuthorizationHelper.requestPermissionIfNeeded()
         Task {
             await FinderExtensionHelper.repairRegistrationIfNeeded()
+            _ = await container.refreshFinderExtensionStatus()
         }
 
         actionObserver = DistributedNotificationCenter.default().addObserver(
