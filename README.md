@@ -3,7 +3,7 @@
 **RepoShell** 是一款面向 macOS（13.0 Ventura+，Universal `arm64` / `x86_64`）的原生版本控制图形客户端与 Finder 深度集成工具，提供经典的 **TortoiseGit / TortoiseSVN** 风格交互体验。
 
 - **开发者**：leaf (`flying_butterfly@126.com`)
-- **当前版本**：`0.1.0`
+- **当前版本**：`0.1.1`
 - **GitHub 仓库**：`https://github.com/backkom/repo-shell`
 - **开源协议**：[MIT License](LICENSE)
 

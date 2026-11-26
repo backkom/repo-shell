@@ -11,7 +11,7 @@ public enum AppConstants {
 
     public static let developerName = "leaf"
     public static let developerEmail = "flying_butterfly@126.com"
-    public static let defaultVersion = "0.1.0"
+    public static let defaultVersion = "0.1.1"
     public static let defaultBuildNumber = "1"
     public static let githubRepo = "backkom/repo-shell"
     public static let copyright = "Copyright © 2026 leaf (flying_butterfly@126.com)"
