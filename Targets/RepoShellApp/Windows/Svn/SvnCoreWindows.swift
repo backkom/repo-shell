@@ -86,10 +86,16 @@ struct SvnCommitWindowView: View {
             VSplitView {
                 // Message Pane
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack {
+                    HStack(spacing: 8) {
                         Text(L("Message:", "提交信息："))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.secondary)
+                        let firstLineCount = message.split(separator: "\n", omittingEmptySubsequences: false).first?.count ?? 0
+                        if !message.isEmpty {
+                            Text(String(format: L("Subject: %d chars", "首行 %d 字符"), firstLineCount))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundColor(firstLineCount > 72 ? .orange : .secondary)
+                        }
                         Spacer()
                         Menu(L("Recent Messages", "最近提交信息")) {
                             if recentMessages.isEmpty {
@@ -153,32 +159,10 @@ struct SvnCommitWindowView: View {
                         .controlSize(.small)
                         .frame(maxWidth: 160)
 
-                        HStack(spacing: 4) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            TextField(L("Filter paths…", "过滤路径…"), text: $pathFilter)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 12))
-                            if !pathFilter.isEmpty {
-                                Button {
-                                    pathFilter = ""
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .frame(width: 190)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .cornerRadius(5)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5)
-                                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                        SearchInputField(
+                            placeholder: L("Filter paths…", "过滤路径…"),
+                            text: $pathFilter,
+                            width: 190
                         )
                     }
 
@@ -567,13 +551,22 @@ struct SvnModificationsWindowView: View {
                     .onChange(of: showIgnored) { _ in load(remote: checkRemote) }
                 Toggle(L("Locks", "锁信息"), isOn: $showLocks)
 
-                TextField(L("Filter…", "过滤…"), text: $filterText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 170)
+                SearchInputField(
+                    placeholder: L("Filter…", "过滤…"),
+                    text: $filterText,
+                    width: 170
+                )
             }
+            .controlSize(.small)
             .padding(10)
 
             Divider()
+
+            TableColumnHeaderBar(
+                columns: svnModColumns,
+                horizontalPadding: 12,
+                spacing: 10
+            )
 
             if isLoading && items.isEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -591,8 +584,10 @@ struct SvnModificationsWindowView: View {
                         StatusBadgeLabel(status: entry.item.status)
                             .frame(width: 90, alignment: .leading)
 
+                        FileTypeIconView(path: entry.item.relativePath, isDirectory: entry.item.isDirectory)
+
                         Text(entry.item.relativePath)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.system(size: 12.5))
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -613,21 +608,18 @@ struct SvnModificationsWindowView: View {
                                 .foregroundColor(.orange)
                         }
 
-                        if let rev = entry.revision {
-                            Text("r\(rev)")
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.secondary)
-                                .frame(width: 56, alignment: .trailing)
-                        }
+                        Text(entry.revision.map { "r\($0)" } ?? "")
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                            .frame(width: 56, alignment: .trailing)
 
-                        if let author = entry.commitAuthor {
-                            Text(author)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .frame(width: 90, alignment: .trailing)
-                                .lineLimit(1)
-                        }
+                        Text(entry.commitAuthor ?? "")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .frame(width: 90, alignment: .trailing)
+                            .lineLimit(1)
                     }
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .tag(entry.id)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
@@ -690,6 +682,15 @@ struct SvnModificationsWindowView: View {
             .padding(10)
         }
         .onAppear { load(remote: false) }
+    }
+
+    private var svnModColumns: [TableColumnSpec] {
+        [
+            TableColumnSpec(L("Status", "状态"), width: 90),
+            TableColumnSpec(L("Path", "路径")),
+            TableColumnSpec(L("Rev", "版本"), width: 56, alignment: .trailing),
+            TableColumnSpec(L("Author", "作者"), width: 90, alignment: .trailing)
+        ]
     }
 
     private var filteredItems: [SvnDetailedStatusItem] {
@@ -792,10 +793,11 @@ struct SvnLogWindowView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                TextField(L("Search author / message / path…", "搜索作者 / 提交信息 / 路径…"), text: $searchQuery)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 200)
-                    .onSubmit { loadInitial() }
+                SearchInputField(
+                    placeholder: L("Search author / message / path…", "搜索作者 / 提交信息 / 路径…"),
+                    text: $searchQuery,
+                    onSubmit: { loadInitial() }
+                )
 
                 TextField(L("Rev range (e.g. HEAD:100)", "版本范围 (如 HEAD:100)"), text: $revisionRange)
                     .textFieldStyle(.roundedBorder)
@@ -803,23 +805,43 @@ struct SvnLogWindowView: View {
                     .onSubmit { loadInitial() }
 
                 Toggle(L("Stop on copy", "复制点停止"), isOn: $stopOnCopy)
+                    .toggleStyle(.checkbox)
                     .onChange(of: stopOnCopy) { _ in loadInitial() }
                 Toggle(L("Merge history (-g)", "合并历史 (-g)"), isOn: $useMergeHistory)
+                    .toggleStyle(.checkbox)
                     .onChange(of: useMergeHistory) { _ in loadInitial() }
 
                 Button {
                     loadInitial()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    if isLoading {
+                        ProgressView().controlSize(.small).frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
                 .help(L("Refresh Log", "刷新日志"))
             }
-            .padding(10)
+            .controlSize(.small)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(nsColor: .windowBackgroundColor))
 
             Divider()
 
             VSplitView {
                 VStack(spacing: 0) {
+                    TableColumnHeaderBar(
+                        columns: [
+                            TableColumnSpec(L("Revision", "修订"), width: 72),
+                            TableColumnSpec(L("Author", "作者"), width: 100),
+                            TableColumnSpec(L("Message", "提交信息")),
+                            TableColumnSpec(L("Date", "日期"), width: 140, alignment: .trailing)
+                        ],
+                        horizontalPadding: 12,
+                        spacing: 10
+                    )
+
                     if isLoading && commits.isEmpty {
                         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if commits.isEmpty {
@@ -843,13 +865,16 @@ struct SvnLogWindowView: View {
                                     .lineLimit(1)
 
                                 Text(commit.subject)
+                                    .font(.system(size: 12.5))
                                     .lineLimit(1)
                                     .frame(maxWidth: .infinity, alignment: .leading)
 
                                 Text(commit.date.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
+                                    .font(.caption.monospacedDigit())
                                     .foregroundColor(.secondary)
+                                    .frame(width: 140, alignment: .trailing)
                             }
+                            .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                             .tag(commit.id)
                             .contextMenu {
                                 Button(L("Update Working Copy to Revision %@", "更新工作副本至 r%@")
@@ -908,58 +933,96 @@ struct SvnLogWindowView: View {
                 // Detail bottom split
                 if let commit = commits.first(where: { $0.id == selectedCommitID }) {
                     VSplitView {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text("\(commit.shortHash) • \(commit.author)")
-                                        .font(.headline)
-                                    Spacer()
-                                    Text(commit.date.formatted(date: .long, time: .standard))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                        VStack(spacing: 0) {
+                            HStack(spacing: 8) {
+                                Text(commit.shortHash)
+                                    .font(.caption.monospaced().weight(.semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.accentColor.opacity(0.12))
+                                    .foregroundColor(.accentColor)
+                                    .cornerRadius(4)
+                                Text(commit.author)
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("·")
+                                    .foregroundColor(.secondary)
+                                Text(commit.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Button(L("Edit Log Message…", "编辑日志信息…")) {
+                                    editingCommit = commit
                                 }
+                                .controlSize(.small)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.65))
+
+                            Divider()
+
+                            ScrollView {
                                 Text(commit.body.isEmpty ? commit.subject : "\(commit.subject)\n\(commit.body)")
-                                    .font(.body)
+                                    .font(.system(size: 12.5))
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
                             }
-                            .padding(10)
+                            .background(Color(nsColor: .textBackgroundColor))
                         }
-                        .frame(minHeight: 80)
+                        .frame(minHeight: 90)
 
-                        List(commit.changedPaths) { ch in
-                            HStack(spacing: 8) {
-                                Text(ch.action)
-                                    .font(.caption.monospaced().weight(.bold))
-                                    .foregroundColor(colorForAction(ch.action))
-                                    .frame(width: 20)
-                                Text(ch.path)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                if let cp = ch.copyFromPath, !cp.isEmpty {
-                                    Text("← \(cp)")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                        VStack(spacing: 0) {
+                            TableColumnHeaderBar(
+                                columns: [
+                                    TableColumnSpec("", width: 24, alignment: .center),
+                                    TableColumnSpec(L("Path", "路径"))
+                                ],
+                                horizontalPadding: 12,
+                                spacing: 8
+                            )
+
+                            List(commit.changedPaths) { ch in
+                                HStack(spacing: 8) {
+                                    VcsActionBadge(action: ch.action)
+                                        .frame(width: 24)
+                                    FileTypeIconView(path: ch.path)
+                                    Text(ch.path)
+                                        .font(.system(size: 12.5))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    if let cp = ch.copyFromPath, !cp.isEmpty {
+                                        Text("← \(cp)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
                                 }
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
-                                diffChangedPath(ch, revision: commit.hash)
-                            }
-                            .contextMenu {
-                                Button(L("Diff against previous revision", "与前一版本对比")) {
+                                .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                                .contentShape(Rectangle())
+                                .onTapGesture(count: 2) {
                                     diffChangedPath(ch, revision: commit.hash)
                                 }
-                                Button(L("Blame at r\(commit.hash)", "在 r\(commit.hash) 追溯")) {
-                                    AppContainer.shared.windowCoordinator.openBlameResult(
-                                        repoPath: repoPath,
-                                        filePath: ch.path,
-                                        revision: commit.hash,
-                                        ignoreWhitespace: false,
-                                        hideAuthorAndDate: false
-                                    )
+                                .contextMenu {
+                                    Button(L("Diff against previous revision", "与前一版本对比")) {
+                                        diffChangedPath(ch, revision: commit.hash)
+                                    }
+                                    Button(L("Blame at r\(commit.hash)", "在 r\(commit.hash) 追溯")) {
+                                        AppContainer.shared.windowCoordinator.openBlameResult(
+                                            repoPath: repoPath,
+                                            filePath: ch.path,
+                                            revision: commit.hash,
+                                            ignoreWhitespace: false,
+                                            hideAuthorAndDate: false
+                                        )
+                                    }
                                 }
                             }
+                            .listStyle(.inset)
+                            .environment(\.defaultMinListRowHeight, 22)
                         }
                         .frame(minHeight: 120)
                     }

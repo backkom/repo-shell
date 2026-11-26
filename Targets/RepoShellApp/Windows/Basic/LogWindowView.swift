@@ -7,11 +7,13 @@ struct LogWindowView: View {
     let initialPathFilter: String?
 
     @State private var commits: [VcsCommit] = []
+    @State private var graphLayouts: [String: CommitGraphNodeLayout] = [:]
     @State private var selectedCommitIDs: Set<String> = []
     @State private var searchQuery: String = ""
     @State private var pathFilter: String
     @State private var selectedRevisionScope: String = "--all"
     @State private var references: [GitReference] = []
+    @State private var showGraph: Bool = true
     @State private var noMerges: Bool = false
     @State private var followRenames: Bool = false
     @State private var limit: Int = 200
@@ -29,10 +31,16 @@ struct LogWindowView: View {
         return commits.first(where: { $0.id == first })
     }
 
+    private var graphColumnWidth: CGFloat {
+        let maxLanes = graphLayouts.values.map(\.maxLanes).max() ?? 1
+        let clamped = min(max(maxLanes, 1), 8)
+        return max(36, CGFloat(clamped) * 12 + 10)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Filter Toolbar
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Picker(L("Scope:", "范围："), selection: $selectedRevisionScope) {
                     Text(L("All Branches", "全部分支")).tag("--all")
                     Text("HEAD").tag("HEAD")
@@ -40,191 +48,289 @@ struct LogWindowView: View {
                         Text(ref.shortName).tag(ref.shortName)
                     }
                 }
-                .frame(maxWidth: 180)
+                .frame(maxWidth: 175)
                 .onChange(of: selectedRevisionScope) { _ in
                     Task { await reload() }
                 }
 
-                TextField(L("Search commit message…", "搜索提交信息…"), text: $searchQuery)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { Task { await reload() } }
+                SearchInputField(
+                    placeholder: L("Search message / author / SHA…", "搜索提交信息 / 作者 / 哈希…"),
+                    text: $searchQuery,
+                    onSubmit: { Task { await reload() } }
+                )
 
-                TextField(L("Filter path…", "筛选路径…"), text: $pathFilter)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 170)
-                    .onSubmit { Task { await reload() } }
+                SearchInputField(
+                    placeholder: L("Filter path…", "筛选路径…"),
+                    text: $pathFilter,
+                    width: 165,
+                    onSubmit: { Task { await reload() } }
+                )
+
+                Toggle(L("Graph", "分支图"), isOn: $showGraph)
+                    .toggleStyle(.checkbox)
 
                 Toggle(L("No merges", "不显示合并"), isOn: $noMerges)
+                    .toggleStyle(.checkbox)
                     .onChange(of: noMerges) { _ in Task { await reload() } }
 
                 if !pathFilter.isEmpty {
                     Toggle(L("Follow", "跟随重命名"), isOn: $followRenames)
+                        .toggleStyle(.checkbox)
                         .onChange(of: followRenames) { _ in Task { await reload() } }
                 }
 
-                Button(L("Refresh", "刷新")) {
+                Button {
                     Task { await reload() }
+                } label: {
+                    if isLoading {
+                        ProgressView().controlSize(.small).frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
+                .help(L("Refresh", "刷新"))
             }
+            .controlSize(.small)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .background(Color(nsColor: .windowBackgroundColor))
 
             Divider()
 
             VSplitView {
                 // Top Pane: Commit History Table
-                Group {
+                VStack(spacing: 0) {
+                    TableColumnHeaderBar(
+                        columns: headerColumns,
+                        horizontalPadding: 10,
+                        spacing: 8
+                    )
+
                     if isLoading && commits.isEmpty {
                         ProgressView()
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color(nsColor: .controlBackgroundColor))
                     } else if commits.isEmpty {
                         EmptyStateBox(systemImage: "clock", title: L("No Commits Found", "无提交记录"))
+                            .background(Color(nsColor: .controlBackgroundColor))
                     } else {
                         List(commits, selection: $selectedCommitIDs) { commit in
-                            CommitRowView(commit: commit)
-                                .tag(commit.id)
-                                .contextMenu {
-                                    commitContextMenu(for: commit)
-                                }
+                            CommitRowView(
+                                commit: commit,
+                                layout: showGraph ? graphLayouts[commit.id] : nil,
+                                graphWidth: graphColumnWidth
+                            )
+                            .tag(commit.id)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+                            .contextMenu {
+                                commitContextMenu(for: commit)
+                            }
                         }
                         .listStyle(.inset)
+                        .environment(\.defaultMinListRowHeight, 26)
                     }
                 }
-                .frame(minHeight: 210)
+                .frame(minHeight: 220)
 
-                // Middle Pane: Full Message & Notes
+                // Middle Pane: Full Message, Metadata & Notes
                 if let commit = activeCommit {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(commit.hash)
-                                    .font(.caption.monospaced())
-                                    .foregroundColor(.secondary)
-                                    .textSelection(.enabled)
-                                Spacer()
-                                Button(L("Edit Notes", "编辑备注")) {
-                                    AppContainer.shared.windowCoordinator.openEditNotes(
-                                        repoPath: repoPath,
-                                        commitHash: commit.hash,
-                                        currentNote: commit.note ?? ""
-                                    )
-                                }
-                                .font(.caption)
-                                if commit.hash == commits.first?.hash {
-                                    Button(L("Edit Commit Message…", "编辑日志信息…")) {
-                                        let fullMsg = commit.body.isEmpty ? commit.subject : "\(commit.subject)\n\n\(commit.body)"
-                                        AppContainer.shared.windowCoordinator.openEditCommitMessage(
-                                            repoPath: repoPath,
-                                            initialMessage: fullMsg
-                                        ) {
-                                            Task { await reload() }
-                                        }
-                                    }
-                                    .font(.caption)
-                                }
-                            }
-
-                            Text(commit.subject)
-                                .font(.headline)
+                    VStack(spacing: 0) {
+                        HStack(spacing: 8) {
+                            Text(commit.shortHash)
+                                .font(.caption.monospaced().weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.12))
+                                .foregroundColor(.accentColor)
+                                .cornerRadius(4)
                                 .textSelection(.enabled)
 
-                            if !commit.body.isEmpty {
-                                Text(commit.body)
-                                    .font(.body)
-                                    .textSelection(.enabled)
+                            Text(commit.author)
+                                .font(.system(size: 12, weight: .semibold))
+                            if !commit.authorEmail.isEmpty {
+                                Text("<\(commit.authorEmail)>")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Text("·")
+                                .foregroundColor(.secondary)
+                            Text(commit.date.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            if !commit.parents.isEmpty {
+                                Text("·")
+                                    .foregroundColor(.secondary)
+                                Text(L("Parents:", "父提交:") + " " + commit.parents.map { String($0.prefix(7)) }.joined(separator: ", "))
+                                    .font(.caption.monospaced())
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
                             }
 
-                            if let note = commit.note, !note.isEmpty {
-                                HStack(alignment: .top, spacing: 6) {
-                                    Image(systemName: "note.text")
-                                        .foregroundColor(.orange)
-                                    Text(L("Note: ", "备注：") + note)
-                                        .font(.subheadline)
-                                        .textSelection(.enabled)
+                            Spacer()
+
+                            Button(L("Copy SHA", "拷贝哈希")) {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(commit.hash, forType: .string)
+                            }
+                            .controlSize(.small)
+
+                            Button(L("Edit Notes", "编辑备注")) {
+                                AppContainer.shared.windowCoordinator.openEditNotes(
+                                    repoPath: repoPath,
+                                    commitHash: commit.hash,
+                                    currentNote: commit.note ?? ""
+                                )
+                            }
+                            .controlSize(.small)
+
+                            if commit.hash == commits.first?.hash {
+                                Button(L("Edit Commit Message…", "编辑日志信息…")) {
+                                    let fullMsg = commit.body.isEmpty ? commit.subject : "\(commit.subject)\n\n\(commit.body)"
+                                    AppContainer.shared.windowCoordinator.openEditCommitMessage(
+                                        repoPath: repoPath,
+                                        initialMessage: fullMsg
+                                    ) {
+                                        Task { await reload() }
+                                    }
                                 }
-                                .padding(8)
-                                .background(Color.orange.opacity(0.1))
-                                .cornerRadius(6)
+                                .controlSize(.small)
                             }
                         }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65))
+
+                        Divider()
+
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(commit.subject)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .textSelection(.enabled)
+
+                                if !commit.body.isEmpty {
+                                    Text(commit.body)
+                                        .font(.system(size: 12.5))
+                                        .foregroundColor(.primary.opacity(0.9))
+                                        .textSelection(.enabled)
+                                }
+
+                                if let note = commit.note, !note.isEmpty {
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Image(systemName: "note.text")
+                                            .foregroundColor(.orange)
+                                        Text(L("Note: ", "备注：") + note)
+                                            .font(.subheadline)
+                                            .textSelection(.enabled)
+                                    }
+                                    .padding(8)
+                                    .background(Color.orange.opacity(0.1))
+                                    .cornerRadius(6)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .background(Color(nsColor: .textBackgroundColor))
                     }
-                    .frame(minHeight: 110, maxHeight: 180)
+                    .frame(minHeight: 110, idealHeight: 135)
                 }
 
                 // Bottom Pane: Changed Paths in Selected Commit
                 if let commit = activeCommit {
-                    List(commit.changedPaths) { changed in
-                        HStack(spacing: 8) {
-                            Text(changed.action)
-                                .font(.caption.monospaced().bold())
-                                .frame(width: 22)
-                                .foregroundColor(actionColor(changed.action))
-                            Text(changed.path)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            if let copyFrom = changed.copyFromPath {
-                                Text("← \(copyFrom)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            if let add = changed.additions, let del = changed.deletions {
-                                Text("+\(add) -\(del)")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            diffChangedPath(changed, commit: commit)
-                        }
-                        .contextMenu {
-                            Button(L("Diff with Previous Version", "与前一版本进行对比")) {
-                                diffChangedPath(changed, commit: commit)
-                            }
-                            Button(L("Diff with Working Tree", "与工作目录进行对比")) {
-                                let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
-                                AppContainer.shared.windowCoordinator.openDiffWithRevision(
-                                    repoPath: repoPath,
-                                    filePath: abs,
-                                    revision: commit.hash,
-                                    rightTitle: L("Working Tree", "工作区")
-                                )
-                            }
-                            Button(L("Show Log for This File", "显示此文件日志")) {
-                                let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
-                                AppContainer.shared.windowCoordinator.dispatch(action: .showLog, repoPath: repoPath, targetDir: repoPath, selectedPaths: [abs])
-                            }
-                            Button(L("Blame…", "追溯…")) {
-                                let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
-                                AppContainer.shared.windowCoordinator.openBlameResult(
-                                    repoPath: repoPath,
-                                    filePath: abs,
-                                    revision: commit.hash,
-                                    ignoreWhitespace: false,
-                                    hideAuthorAndDate: false
-                                )
-                            }
-                            Divider()
-                            Button(L("Save Revision As…", "保存版本至…")) {
-                                saveFileAtCommit(path: changed.path, commitHash: commit.hash)
-                            }
-                            Button(L("Revert to This Version", "复原至此版本")) {
-                                let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
-                                Task {
-                                    try? await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: changed.path, revision: commit.hash, to: abs)
-                                    AppContainer.shared.triggerRefresh(repoPath: repoPath)
+                    VStack(spacing: 0) {
+                        TableColumnHeaderBar(
+                            columns: [
+                                TableColumnSpec("", width: 24, alignment: .center),
+                                TableColumnSpec(L("Path", "路径")),
+                                TableColumnSpec(L("Changes", "变更"), width: 92, alignment: .trailing)
+                            ],
+                            horizontalPadding: 10,
+                            spacing: 8
+                        )
+
+                        if commit.changedPaths.isEmpty {
+                            EmptyStateBox(systemImage: "doc", title: L("No Changed Files in Commit", "此提交无文件改动"))
+                                .background(Color(nsColor: .controlBackgroundColor))
+                        } else {
+                            List(commit.changedPaths) { changed in
+                                HStack(spacing: 8) {
+                                    VcsActionBadge(action: changed.action)
+                                        .frame(width: 24)
+                                    FileTypeIconView(path: changed.path)
+                                    Text(changed.path)
+                                        .font(.system(size: 12.5))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    if let copyFrom = changed.copyFromPath {
+                                        Text("← \(copyFrom)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
+                                    if let add = changed.additions, let del = changed.deletions {
+                                        DiffLineStatsBadge(additions: add, deletions: del)
+                                            .frame(width: 92, alignment: .trailing)
+                                    }
+                                }
+                                .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+                                .contentShape(Rectangle())
+                                .onTapGesture(count: 2) {
+                                    diffChangedPath(changed, commit: commit)
+                                }
+                                .contextMenu {
+                                    Button(L("Diff with Previous Version", "与前一版本进行对比")) {
+                                        diffChangedPath(changed, commit: commit)
+                                    }
+                                    Button(L("Diff with Working Tree", "与工作目录进行对比")) {
+                                        let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
+                                        AppContainer.shared.windowCoordinator.openDiffWithRevision(
+                                            repoPath: repoPath,
+                                            filePath: abs,
+                                            revision: commit.hash,
+                                            rightTitle: L("Working Tree", "工作区")
+                                        )
+                                    }
+                                    Button(L("Show Log for This File", "显示此文件日志")) {
+                                        let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
+                                        AppContainer.shared.windowCoordinator.dispatch(action: .showLog, repoPath: repoPath, targetDir: repoPath, selectedPaths: [abs])
+                                    }
+                                    Button(L("Blame…", "追溯…")) {
+                                        let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
+                                        AppContainer.shared.windowCoordinator.openBlameResult(
+                                            repoPath: repoPath,
+                                            filePath: abs,
+                                            revision: commit.hash,
+                                            ignoreWhitespace: false,
+                                            hideAuthorAndDate: false
+                                        )
+                                    }
+                                    Divider()
+                                    Button(L("Save Revision As…", "保存版本至…")) {
+                                        saveFileAtCommit(path: changed.path, commitHash: commit.hash)
+                                    }
+                                    Button(L("Revert to This Version", "复原至此版本")) {
+                                        let abs = PathUtils.normalize("\(repoPath)/\(changed.path)")
+                                        Task {
+                                            try? await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: changed.path, revision: commit.hash, to: abs)
+                                            AppContainer.shared.triggerRefresh(repoPath: repoPath)
+                                        }
+                                    }
+                                    Button(L("Copy Path", "拷贝路径")) {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(changed.path, forType: .string)
+                                    }
                                 }
                             }
-                            Button(L("Copy Path", "拷贝路径")) {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(changed.path, forType: .string)
-                            }
+                            .listStyle(.inset)
+                            .environment(\.defaultMinListRowHeight, 22)
                         }
                     }
-                    .listStyle(.inset)
                     .frame(minHeight: 130)
                 }
             }
@@ -233,8 +339,15 @@ struct LogWindowView: View {
 
             HStack {
                 Text(L("Showing \(commits.count) commits", "共显示 \(commits.count) 条提交"))
-                    .font(.caption)
+                    .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
+                if let active = activeCommit {
+                    Text("·")
+                        .foregroundColor(.secondary)
+                    Text(String(format: L("%d files changed in %@", "所选提交改动 %d 个文件"), active.changedPaths.count, active.shortHash))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
                 Button(L("Load More", "加载更多")) {
                     limit += 200
@@ -247,6 +360,7 @@ struct LogWindowView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
         .task {
             if let refs = try? await AppContainer.shared.gitProvider.listReferences(repoPath: repoPath) {
@@ -254,6 +368,18 @@ struct LogWindowView: View {
             }
             await reload()
         }
+    }
+
+    private var headerColumns: [TableColumnSpec] {
+        var cols: [TableColumnSpec] = []
+        if showGraph {
+            cols.append(TableColumnSpec(L("Graph", "图谱"), width: graphColumnWidth, alignment: .leading))
+        }
+        cols.append(TableColumnSpec("SHA", width: 62, alignment: .leading))
+        cols.append(TableColumnSpec(L("Message", "提交信息")))
+        cols.append(TableColumnSpec(L("Author", "作者"), width: 112, alignment: .leading))
+        cols.append(TableColumnSpec(L("Date", "日期"), width: 136, alignment: .trailing))
+        return cols
     }
 
     @ViewBuilder
@@ -395,15 +521,6 @@ struct LogWindowView: View {
         }
     }
 
-    private func actionColor(_ action: String) -> Color {
-        switch action {
-        case "A": return .green
-        case "D": return .red
-        case "R", "C": return .purple
-        default: return .orange
-        }
-    }
-
     private func reload() async {
         isLoading = true
         defer { isLoading = false }
@@ -417,8 +534,10 @@ struct LogWindowView: View {
             skip: 0
         )
         do {
-            commits = try await AppContainer.shared.gitProvider.log(repoPath: repoPath, query: query)
-            if selectedCommitIDs.isEmpty, let first = commits.first {
+            let loaded = try await AppContainer.shared.gitProvider.log(repoPath: repoPath, query: query)
+            commits = loaded
+            graphLayouts = CommitGraphLayoutEngine.computeLayouts(for: loaded)
+            if selectedCommitIDs.isEmpty, let first = loaded.first {
                 selectedCommitIDs = [first.id]
             }
         } catch {
@@ -429,28 +548,35 @@ struct LogWindowView: View {
 
 private struct CommitRowView: View {
     let commit: VcsCommit
+    let layout: CommitGraphNodeLayout?
+    let graphWidth: CGFloat
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
+            if let layout {
+                CommitGraphCellView(layout: layout)
+                    .frame(width: graphWidth, height: 26)
+            }
+
             Text(commit.shortHash)
                 .font(.caption.monospaced())
                 .foregroundColor(.secondary)
-                .frame(width: 64, alignment: .leading)
+                .frame(width: 62, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    ForEach(commit.refs, id: \.self) { ref in
-                        Text(ref)
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(refColor(ref).opacity(0.16))
-                            .foregroundColor(refColor(ref))
-                            .cornerRadius(3)
-                    }
-                    Text(commit.subject)
+            HStack(spacing: 5) {
+                ForEach(commit.refs, id: \.self) { ref in
+                    Text(ref)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(refColor(ref).opacity(0.16))
+                        .foregroundColor(refColor(ref))
+                        .cornerRadius(3.5)
                         .lineLimit(1)
                 }
+                Text(commit.subject)
+                    .font(.system(size: 12.5))
+                    .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -463,15 +589,15 @@ private struct CommitRowView: View {
             Text(commit.author)
                 .font(.caption)
                 .foregroundColor(.secondary)
-                .frame(width: 110, alignment: .leading)
+                .frame(width: 112, alignment: .leading)
                 .lineLimit(1)
 
             Text(commit.date.formatted(date: .abbreviated, time: .shortened))
-                .font(.caption)
+                .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
-                .frame(width: 140, alignment: .trailing)
+                .frame(width: 136, alignment: .trailing)
         }
-        .padding(.vertical, 2)
+        .frame(height: 26)
     }
 
     private func refColor(_ ref: String) -> Color {

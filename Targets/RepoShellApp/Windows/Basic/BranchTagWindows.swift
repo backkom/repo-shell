@@ -320,18 +320,24 @@ struct ReferencesWindowView: View {
 
     @State private var references: [GitReference] = []
     @State private var filterKind: GitReferenceKind? = nil
+    @State private var searchText: String = ""
     @State private var selection: Set<String> = []
     @State private var renameTarget: GitReference?
     @State private var renameText: String = ""
 
     private var filtered: [GitReference] {
-        guard let k = filterKind else { return references }
-        return references.filter { $0.kind == k }
+        let byKind = filterKind == nil ? references : references.filter { $0.kind == filterKind }
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return byKind }
+        return byKind.filter {
+            $0.shortName.localizedCaseInsensitiveContains(q)
+            || $0.lastCommitSubject.localizedCaseInsensitiveContains(q)
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 10) {
                 Picker("", selection: $filterKind) {
                     Text(L("All", "全部")).tag(GitReferenceKind?.none)
                     Text(L("Local Branches", "本地分支")).tag(GitReferenceKind?.some(.localBranch))
@@ -339,7 +345,14 @@ struct ReferencesWindowView: View {
                     Text(L("Tags", "标签")).tag(GitReferenceKind?.some(.tag))
                 }
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 420)
+                .frame(maxWidth: 380)
+
+                SearchInputField(
+                    placeholder: L("Filter refs…", "筛选引用…"),
+                    text: $searchText,
+                    width: 170
+                )
+
                 Spacer()
                 if selection.count == 2 {
                     Button(L("Compare References", "比较引用")) {
@@ -349,39 +362,68 @@ struct ReferencesWindowView: View {
                             AppContainer.shared.windowCoordinator.openCompareRevisions(repoPath: repoPath, rev1: r1.shortName, rev2: r2.shortName)
                         }
                     }
+                    .buttonStyle(.borderedProminent)
                 }
                 Button(L("Refresh", "刷新")) { Task { await reload() } }
             }
-            .padding()
+            .controlSize(.small)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color(nsColor: .windowBackgroundColor))
 
             Divider()
+
+            TableColumnHeaderBar(
+                columns: [
+                    TableColumnSpec(L("Reference", "引用")),
+                    TableColumnSpec(L("Last Commit", "最新提交"), width: 240, alignment: .trailing),
+                    TableColumnSpec("SHA", width: 64, alignment: .trailing)
+                ],
+                horizontalPadding: 12,
+                spacing: 8
+            )
 
             List(filtered, selection: $selection) { ref in
                 HStack(spacing: 8) {
                     Image(systemName: icon(for: ref.kind))
                         .foregroundColor(ref.isCurrent ? .green : .secondary)
                     Text(ref.shortName)
-                        .fontWeight(ref.isCurrent ? .bold : .regular)
+                        .font(.system(size: 12.5, weight: ref.isCurrent ? .semibold : .regular))
+                    if ref.isCurrent {
+                        Text("HEAD")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.16))
+                            .foregroundColor(.green)
+                            .cornerRadius(3)
+                    }
                     if let upstream = ref.upstream {
                         Text("→ \(upstream)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     if let ab = ref.aheadBehind, !ab.isEmpty {
-                        Text("[\(ab)]")
-                            .font(.caption2)
+                        Text(ab)
+                            .font(.caption2.monospacedDigit())
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.accentColor.opacity(0.12))
                             .foregroundColor(.accentColor)
+                            .cornerRadius(3)
                     }
                     Spacer()
                     Text(ref.lastCommitSubject)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
-                        .frame(maxWidth: 220, alignment: .trailing)
+                        .frame(width: 240, alignment: .trailing)
                     Text(String(ref.objectHash.prefix(7)))
                         .font(.caption.monospaced())
                         .foregroundColor(.secondary)
+                        .frame(width: 64, alignment: .trailing)
                 }
+                .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                 .tag(ref.id)
                 .contextMenu {
                     Button(L("Checkout", "签出")) {

@@ -43,20 +43,37 @@ struct MainWindowView: View {
                 Divider()
             }
 
-            Picker("", selection: $selectedTab) {
-                Label(L("Repositories", "工作副本"), systemImage: "folder.badge.gearshape")
-                    .tag(MainTab.repositories)
-                Label(L("General", "通用"), systemImage: "gearshape")
-                    .tag(MainTab.general)
-                Label("Git & SVN", systemImage: "arrow.triangle.branch")
-                    .tag(MainTab.vcs)
-                Label(L("Quick Actions", "快速操作"), systemImage: "bolt.circle")
-                    .tag(MainTab.quickActions)
+            // macOS Preferences-style Top Navigation Bar
+            HStack(spacing: 6) {
+                MainNavTabButton(
+                    title: L("Repositories", "工作副本"),
+                    systemImage: "folder.badge.gearshape",
+                    badgeCount: repoManager.config.repositories.count,
+                    isSelected: selectedTab == .repositories
+                ) { selectedTab = .repositories }
+
+                MainNavTabButton(
+                    title: L("General", "通用"),
+                    systemImage: "gearshape",
+                    isSelected: selectedTab == .general
+                ) { selectedTab = .general }
+
+                MainNavTabButton(
+                    title: "Git & SVN",
+                    systemImage: "arrow.triangle.branch",
+                    isSelected: selectedTab == .vcs
+                ) { selectedTab = .vcs }
+
+                MainNavTabButton(
+                    title: L("Quick Actions", "快速操作"),
+                    systemImage: "bolt.circle",
+                    isSelected: selectedTab == .quickActions
+                ) { selectedTab = .quickActions }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
 
             Divider()
 
@@ -85,5 +102,57 @@ struct MainWindowView: View {
                 _ = await AppContainer.shared.refreshFinderExtensionStatus()
             }
         }
+    }
+}
+
+private struct MainNavTabButton: View {
+    let title: String
+    let systemImage: String
+    var badgeCount: Int? = nil
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                        .frame(width: 24, height: 20)
+                }
+                HStack(spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 11.5, weight: isSelected ? .semibold : .medium))
+                    if let count = badgeCount, count > 0 {
+                        Text("\(count)")
+                            .font(.system(size: 9.5, weight: .semibold).monospacedDigit())
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 0.5)
+                            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15))
+                            .cornerRadius(4)
+                    }
+                }
+            }
+            .foregroundColor(isSelected ? .accentColor : .primary.opacity(0.82))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        isSelected
+                            ? Color.accentColor.opacity(0.13)
+                            : (isHovered ? Color.primary.opacity(0.05) : Color.clear)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.accentColor.opacity(0.28) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }

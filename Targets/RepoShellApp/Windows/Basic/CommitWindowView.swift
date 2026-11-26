@@ -39,6 +39,8 @@ struct CommitWindowView: View {
 
     @State private var branchName: String = ""
     @State private var upstreamBranch: String?
+    @State private var aheadCount: Int = 0
+    @State private var behindCount: Int = 0
     @State private var repoState: VcsRepoState = .normal
     @State private var message: String = ""
     @State private var amend: Bool = false
@@ -126,6 +128,20 @@ struct CommitWindowView: View {
                     .foregroundColor(.secondary)
                 Label(branchName.isEmpty ? "HEAD" : branchName, systemImage: "arrow.triangle.branch")
                     .font(.subheadline.weight(.semibold))
+                if let up = upstreamBranch, !up.isEmpty {
+                    Text("→ \(up)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if aheadCount > 0 || behindCount > 0 {
+                        Text("↑\(aheadCount) ↓\(behindCount)")
+                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.accentColor.opacity(0.12))
+                            .foregroundColor(.accentColor)
+                            .cornerRadius(4)
+                    }
+                }
                 Spacer()
                 Button(L("Manage Changelists…", "变更列表…")) {
                     AppContainer.shared.windowCoordinator.openChangelists(repoPath: repoPath)
@@ -157,11 +173,26 @@ struct CommitWindowView: View {
             VSplitView {
                 // Message Area
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack {
+                    HStack(spacing: 8) {
                         Text(L("Message:", "提交信息："))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.secondary)
+
+                        let firstLineCount = message.split(separator: "\n", omittingEmptySubsequences: false).first?.count ?? 0
+                        if !message.isEmpty {
+                            Text(String(format: L("Subject: %d chars", "首行 %d 字符"), firstLineCount))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundColor(firstLineCount > 72 ? .orange : .secondary)
+                        }
+
                         Spacer()
+
+                        Button(L("Sign-off", "签名")) {
+                            insertSignOff()
+                        }
+                        .controlSize(.small)
+                        .help(L("Append Signed-off-by line", "添加 Signed-off-by 签名行"))
+
                         Menu(L("Recent Messages", "最近信息")) {
                             if recentMessages.isEmpty {
                                 Text(L("None", "无"))
@@ -224,32 +255,10 @@ struct CommitWindowView: View {
                         .controlSize(.small)
                         .frame(maxWidth: 170)
 
-                        HStack(spacing: 4) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            TextField(L("Filter paths…", "筛选路径…"), text: $filterText)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 12))
-                            if !filterText.isEmpty {
-                                Button {
-                                    filterText = ""
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .frame(width: 190)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .cornerRadius(5)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5)
-                                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                        SearchInputField(
+                            placeholder: L("Filter paths…", "筛选路径…"),
+                            text: $filterText,
+                            width: 190
                         )
                     }
 
@@ -308,6 +317,13 @@ struct CommitWindowView: View {
                             Text(String(format: L("%d highlighted", "已选中 %d 行"), highlightedPaths.count))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                        }
+
+                        let checkedItems = visible.filter { selectedPaths.contains($0.relativePath) }
+                        let checkedAdd = checkedItems.compactMap(\.additions).reduce(0, +)
+                        let checkedDel = checkedItems.compactMap(\.deletions).reduce(0, +)
+                        if checkedAdd > 0 || checkedDel > 0 {
+                            DiffLineStatsBadge(additions: checkedAdd, deletions: checkedDel)
                         }
 
                         Text(String(format: L("%d selected, %d files total", "已勾选 %d 项，共 %d 个文件"), checkedVisibleCount, visible.count))
@@ -474,6 +490,8 @@ struct CommitWindowView: View {
             )
             branchName = res.branchName
             upstreamBranch = res.upstreamBranch
+            aheadCount = res.aheadCount
+            behindCount = res.behindCount
             repoState = res.repoState
             items = res.items
 
@@ -491,6 +509,21 @@ struct CommitWindowView: View {
             }
         } catch {
             AlertHelper.showError(error)
+        }
+    }
+
+    private func insertSignOff() {
+        Task {
+            let gp = AppContainer.shared.gitProvider
+            let name = await gp.getGlobalConfigValue(key: "user.name")
+            let email = await gp.getGlobalConfigValue(key: "user.email")
+            let displayName = name.isEmpty ? NSFullUserName() : name
+            let signOff = email.isEmpty
+                ? "Signed-off-by: \(displayName)"
+                : "Signed-off-by: \(displayName) <\(email)>"
+            if message.contains(signOff) { return }
+            let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            message = trimmed.isEmpty ? signOff : "\(trimmed)\n\n\(signOff)"
         }
     }
 

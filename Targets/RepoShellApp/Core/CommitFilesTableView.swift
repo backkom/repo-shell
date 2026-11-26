@@ -14,6 +14,8 @@ struct CommitFileRow: Identifiable, Equatable {
     let isDirectory: Bool
     let detailText: String
     let tooltipText: String
+    var stagedText: String = ""
+    var sizeText: String = ""
 }
 
 enum CommitFileContextAction {
@@ -30,29 +32,6 @@ enum CommitFileContextAction {
     case openFile(CommitFileRow)
     case revealInFinder([CommitFileRow])
     case copyPaths([CommitFileRow])
-}
-
-@MainActor
-private enum NativeFileIconCache {
-    private static var cache: [String: NSImage] = [:]
-
-    static func icon(for row: CommitFileRow) -> NSImage {
-        let key = row.isDirectory ? "__dir__" : (row.extensionText.isEmpty ? "__file__" : row.extensionText.lowercased())
-        if let hit = cache[key] {
-            return hit
-        }
-        let img: NSImage
-        if row.isDirectory {
-            img = NSWorkspace.shared.icon(for: .folder)
-        } else if !row.extensionText.isEmpty, let ut = UTType(filenameExtension: row.extensionText) {
-            img = NSWorkspace.shared.icon(for: ut)
-        } else {
-            img = NSWorkspace.shared.icon(for: .data)
-        }
-        img.size = NSSize(width: 16, height: 16)
-        cache[key] = img
-        return img
-    }
 }
 
 private final class CommitCheckCellView: NSTableCellView {
@@ -195,6 +174,8 @@ struct CommitFilesTableView: NSViewRepresentable {
     let detailColumnTitle: String
     let vcsType: VcsType
     let changelists: [Changelist]
+    var showsCheckboxes: Bool = true
+    var showsStagedAndSizeColumns: Bool = false
     let onDoubleClick: (CommitFileRow) -> Void
     let onContextAction: (CommitFileContextAction) -> Void
 
@@ -223,13 +204,16 @@ struct CommitFilesTableView: NSViewRepresentable {
         table.columnAutoresizingStyle = .sequentialColumnAutoresizingStyle
         table.focusRingType = .none
 
-        let colCheck = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("check"))
-        colCheck.title = ""
-        colCheck.width = 26
-        colCheck.minWidth = 26
-        colCheck.maxWidth = 26
-        colCheck.resizingMask = []
-        colCheck.sortDescriptorPrototype = NSSortDescriptor(key: "check", ascending: true)
+        if showsCheckboxes {
+            let colCheck = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("check"))
+            colCheck.title = ""
+            colCheck.width = 26
+            colCheck.minWidth = 26
+            colCheck.maxWidth = 26
+            colCheck.resizingMask = []
+            colCheck.sortDescriptorPrototype = NSSortDescriptor(key: "check", ascending: true)
+            table.addTableColumn(colCheck)
+        }
 
         let colPath = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("path"))
         colPath.title = L("Path", "路径")
@@ -254,6 +238,21 @@ struct CommitFilesTableView: NSViewRepresentable {
         colStatus.resizingMask = [.userResizingMask]
         colStatus.sortDescriptorPrototype = NSSortDescriptor(key: "status", ascending: true)
 
+        table.addTableColumn(colPath)
+        table.addTableColumn(colExt)
+        table.addTableColumn(colStatus)
+
+        if showsStagedAndSizeColumns {
+            let colStaged = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("staged"))
+            colStaged.title = L("Staged", "暂存")
+            colStaged.width = 64
+            colStaged.minWidth = 48
+            colStaged.maxWidth = 100
+            colStaged.resizingMask = [.userResizingMask]
+            colStaged.sortDescriptorPrototype = NSSortDescriptor(key: "staged", ascending: true)
+            table.addTableColumn(colStaged)
+        }
+
         let colDetail = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("detail"))
         colDetail.title = detailColumnTitle
         colDetail.width = 96
@@ -262,19 +261,28 @@ struct CommitFilesTableView: NSViewRepresentable {
         colDetail.resizingMask = [.userResizingMask]
         colDetail.headerCell.alignment = .right
         colDetail.sortDescriptorPrototype = NSSortDescriptor(key: "detail", ascending: true)
-
-        table.addTableColumn(colCheck)
-        table.addTableColumn(colPath)
-        table.addTableColumn(colExt)
-        table.addTableColumn(colStatus)
         table.addTableColumn(colDetail)
+
+        if showsStagedAndSizeColumns {
+            let colSize = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("size"))
+            colSize.title = L("Size", "大小")
+            colSize.width = 74
+            colSize.minWidth = 54
+            colSize.maxWidth = 120
+            colSize.resizingMask = [.userResizingMask]
+            colSize.headerCell.alignment = .right
+            colSize.sortDescriptorPrototype = NSSortDescriptor(key: "size", ascending: true)
+            table.addTableColumn(colSize)
+        }
 
         let coord = context.coordinator
         table.delegate = coord
         table.dataSource = coord
         table.target = coord
         table.doubleAction = #selector(Coordinator.handleDoubleClick(_:))
-        table.onSpaceKey = { [weak coord] in coord?.handleSpaceToggle() }
+        if showsCheckboxes {
+            table.onSpaceKey = { [weak coord] in coord?.handleSpaceToggle() }
+        }
         table.onReturnKey = { [weak coord] in coord?.handleReturnOpen() }
 
         let contextMenu = NSMenu()
@@ -380,6 +388,18 @@ struct CommitFilesTableView: NSViewRepresentable {
                     } else {
                         cmp = lhs.statusDisplayText.localizedCompare(rhs.statusDisplayText)
                     }
+                case "staged":
+                    if lhs.stagedText.localizedStandardCompare(rhs.stagedText) == .orderedSame {
+                        cmp = lhs.relativePath.localizedStandardCompare(rhs.relativePath)
+                    } else {
+                        cmp = lhs.stagedText.localizedStandardCompare(rhs.stagedText)
+                    }
+                case "size":
+                    if lhs.sizeText.localizedStandardCompare(rhs.sizeText) == .orderedSame {
+                        cmp = lhs.relativePath.localizedStandardCompare(rhs.relativePath)
+                    } else {
+                        cmp = lhs.sizeText.localizedStandardCompare(rhs.sizeText)
+                    }
                 case "detail":
                     if lhs.detailText.localizedStandardCompare(rhs.detailText) == .orderedSame {
                         cmp = lhs.relativePath.localizedStandardCompare(rhs.relativePath)
@@ -437,7 +457,7 @@ struct CommitFilesTableView: NSViewRepresentable {
                     v.identifier = id
                     return v
                 }()
-                cell.iconView.image = NativeFileIconCache.icon(for: item)
+                cell.iconView.image = SharedFileIconCache.icon(forPath: item.relativePath, isDirectory: item.isDirectory)
                 cell.label.stringValue = item.relativePath
                 cell.toolTip = item.tooltipText
                 cell.normalTextColor = rowColor
@@ -465,6 +485,17 @@ struct CommitFilesTableView: NSViewRepresentable {
                 cell.normalTextColor = rowColor
                 return cell
 
+            case "staged":
+                let id = NSUserInterfaceItemIdentifier("CommitStagedCell")
+                let cell = (tableView.makeView(withIdentifier: id, owner: nil) as? CommitTextCellView) ?? {
+                    let v = CommitTextCellView(alignment: .left, font: .systemFont(ofSize: 11.5))
+                    v.identifier = id
+                    return v
+                }()
+                cell.label.stringValue = item.stagedText
+                cell.normalTextColor = item.stagedText.isEmpty ? .secondaryLabelColor : .systemGreen
+                return cell
+
             case "detail":
                 let id = NSUserInterfaceItemIdentifier("CommitDetailCell")
                 let cell = (tableView.makeView(withIdentifier: id, owner: nil) as? CommitTextCellView) ?? {
@@ -473,6 +504,17 @@ struct CommitFilesTableView: NSViewRepresentable {
                     return v
                 }()
                 cell.label.stringValue = item.detailText
+                cell.normalTextColor = .secondaryLabelColor
+                return cell
+
+            case "size":
+                let id = NSUserInterfaceItemIdentifier("CommitSizeCell")
+                let cell = (tableView.makeView(withIdentifier: id, owner: nil) as? CommitTextCellView) ?? {
+                    let v = CommitTextCellView(alignment: .right, font: .monospacedDigitSystemFont(ofSize: 11.5, weight: .regular))
+                    v.identifier = id
+                    return v
+                }()
+                cell.label.stringValue = item.sizeText
                 cell.normalTextColor = .secondaryLabelColor
                 return cell
 
@@ -574,13 +616,15 @@ struct CommitFilesTableView: NSViewRepresentable {
                 menu.addItem(.separator())
             }
 
-            let allChecked = targets.allSatisfy { parent.checkedPaths.contains($0.relativePath) }
-            addItem(
-                allChecked ? L("Uncheck Selected", "取消勾选选中项") : L("Check Selected", "勾选选中项"),
-                action: #selector(ctxToggleCheck),
-                to: menu
-            )
-            menu.addItem(.separator())
+            if parent.showsCheckboxes {
+                let allChecked = targets.allSatisfy { parent.checkedPaths.contains($0.relativePath) }
+                addItem(
+                    allChecked ? L("Uncheck Selected", "取消勾选选中项") : L("Check Selected", "勾选选中项"),
+                    action: #selector(ctxToggleCheck),
+                    to: menu
+                )
+                menu.addItem(.separator())
+            }
 
             if targets.count == 1, let single = targets.first {
                 addItem(L("Show Log", "显示日志"), action: #selector(ctxShowLog), to: menu)

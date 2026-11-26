@@ -31,6 +31,18 @@ struct RefLogWindowView: View {
 
             Divider()
 
+            TableColumnHeaderBar(
+                columns: [
+                    TableColumnSpec(L("Selector", "选择器"), width: 85),
+                    TableColumnSpec("SHA", width: 68),
+                    TableColumnSpec(L("Action", "操作"), width: 110),
+                    TableColumnSpec(L("Message", "描述")),
+                    TableColumnSpec(L("Date", "日期"), width: 135, alignment: .trailing)
+                ],
+                horizontalPadding: 12,
+                spacing: 10
+            )
+
             if isLoading && entries.isEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if entries.isEmpty {
@@ -51,13 +63,15 @@ struct RefLogWindowView: View {
                             .frame(width: 110, alignment: .leading)
                             .lineLimit(1)
                         Text(entry.message)
+                            .font(.system(size: 12.5))
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text(entry.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
+                            .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
                             .frame(width: 135, alignment: .trailing)
                     }
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .tag(entry.id)
                     .contextMenu {
                         let picked = entries.filter { selection.contains($0.id) }

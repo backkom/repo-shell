@@ -334,19 +334,33 @@ struct StashListWindowView: View {
 
             Divider()
 
+            TableColumnHeaderBar(
+                columns: [
+                    TableColumnSpec(L("Stash", "储藏"), width: 90),
+                    TableColumnSpec("SHA", width: 64),
+                    TableColumnSpec(L("Branch", "分支"), width: 100),
+                    TableColumnSpec(L("Message", "信息")),
+                    TableColumnSpec(L("Date", "日期"), width: 136, alignment: .trailing)
+                ],
+                horizontalPadding: 12,
+                spacing: 8
+            )
+
             if stashes.isEmpty {
                 EmptyStateBox(systemImage: "tray", title: L("No Stashes", "无储藏"))
             } else {
                 List(stashes, selection: $selectedRef) { s in
-                    HStack {
+                    HStack(spacing: 8) {
                         Text(s.refName).font(.caption.monospaced()).frame(width: 90, alignment: .leading)
                         Text(s.shortHash).font(.caption.monospaced()).foregroundColor(.secondary).frame(width: 64, alignment: .leading)
                         Text(s.branchName).font(.caption).foregroundColor(.accentColor).frame(width: 100, alignment: .leading)
-                        Text(s.message).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(s.message).font(.system(size: 12.5)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                         Text(s.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
+                            .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
+                            .frame(width: 136, alignment: .trailing)
                     }
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .tag(s.refName)
                     .contextMenu {
                         Button(L("Apply Stash", "应用储藏")) { apply(s.refName, pop: false) }

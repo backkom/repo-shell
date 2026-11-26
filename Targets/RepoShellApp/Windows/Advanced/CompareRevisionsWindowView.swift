@@ -48,26 +48,37 @@ struct CompareRevisionsWindowView: View {
 
             Divider()
 
+            TableColumnHeaderBar(
+                columns: [
+                    TableColumnSpec("", width: 24, alignment: .center),
+                    TableColumnSpec(L("Path", "路径")),
+                    TableColumnSpec(L("Changes", "变更"), width: 92, alignment: .trailing)
+                ],
+                horizontalPadding: 12,
+                spacing: 8
+            )
+
             if isLoading && diffs.isEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if diffs.isEmpty {
                 EmptyStateBox(systemImage: "doc.on.doc", title: L("No Differences Found", "两个版本间无差异"))
             } else {
                 List(diffs, selection: $selection) { item in
-                    HStack(spacing: 10) {
-                        Text(item.action)
-                            .font(.caption.monospaced().bold())
+                    HStack(spacing: 8) {
+                        VcsActionBadge(action: item.action)
                             .frame(width: 24)
+                        FileTypeIconView(path: item.path)
                         Text(item.path)
+                            .font(.system(size: 12.5))
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if let add = item.additions, let del = item.deletions {
-                            Text("+\(add) -\(del)")
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.secondary)
+                            DiffLineStatsBadge(additions: add, deletions: del)
+                                .frame(width: 92, alignment: .trailing)
                         }
                     }
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .tag(item.path)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {

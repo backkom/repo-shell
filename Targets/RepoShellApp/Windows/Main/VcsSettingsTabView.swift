@@ -12,16 +12,22 @@ struct VcsSettingsTabView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $selectedVcsTab) {
-                Label("Git", systemImage: "arrow.triangle.branch")
-                    .tag(VcsSettingsSubtab.git)
-                Label("SVN", systemImage: "server.rack")
-                    .tag(VcsSettingsSubtab.svn)
+            HStack {
+                Spacer()
+                Picker("", selection: $selectedVcsTab) {
+                    Label("Git", systemImage: "arrow.triangle.branch")
+                        .tag(VcsSettingsSubtab.git)
+                    Label("SVN", systemImage: "server.rack")
+                        .tag(VcsSettingsSubtab.svn)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 220)
+                Spacer()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
 
             Divider()
 

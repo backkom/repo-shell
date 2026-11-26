@@ -11,25 +11,36 @@ struct RepositoriesTabView: View {
     @ObservedObject private var repoManager = AppContainer.shared.repositoryManager
     @State private var selectedVcsTab: RepoVcsSubtab = .git
     @State private var selectedRepoID: UUID?
-    @State private var showAddMenu = false
-    @State private var showWorkspacePanel = false
+    @State private var searchText: String = ""
     @State private var isDropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $selectedVcsTab) {
-                Label("Git (\(gitRepositories.count))", systemImage: "arrow.triangle.branch")
-                    .tag(RepoVcsSubtab.git)
-                Label("SVN (\(svnRepositories.count))", systemImage: "server.rack")
-                    .tag(RepoVcsSubtab.svn)
+            HStack(spacing: 12) {
+                Picker("", selection: $selectedVcsTab) {
+                    Label("Git (\(gitRepositories.count))", systemImage: "arrow.triangle.branch")
+                        .tag(RepoVcsSubtab.git)
+                    Label("SVN (\(svnRepositories.count))", systemImage: "server.rack")
+                        .tag(RepoVcsSubtab.svn)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 240)
+                .onChange(of: selectedVcsTab) { _ in
+                    selectedRepoID = nil
+                }
+
+                Spacer()
+
+                SearchInputField(
+                    placeholder: L("Filter repositories…", "筛选版本库…"),
+                    text: $searchText,
+                    width: 210
+                )
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .onChange(of: selectedVcsTab) { _ in
-                selectedRepoID = nil
-            }
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
 
             Divider()
 
@@ -42,14 +53,19 @@ struct RepositoriesTabView: View {
                     Spacer()
                     Text("\(filteredRepositories.count)")
                         .foregroundColor(.secondary)
-                        .font(.caption)
+                        .font(.caption.monospacedDigit())
                 }) {
                     if filteredRepositories.isEmpty {
-                        Text(selectedVcsTab == .git
-                             ? L("Drop Git repositories here or click + below to add.", "可将 Git 版本库拖放到此处，或点击下方 + 按钮添加。")
-                             : L("Drop SVN working copies here or click + below to add or checkout.", "可将 SVN 工作副本拖放到此处，或点击下方 + 按钮添加或签出。"))
-                            .foregroundColor(.secondary)
-                            .padding(.vertical, 16)
+                        EmptyStateBox(
+                            systemImage: selectedVcsTab == .git ? "arrow.triangle.branch" : "server.rack",
+                            title: searchText.isEmpty
+                                ? (selectedVcsTab == .git ? L("No Git Repositories", "暂无 Git 版本库") : L("No SVN Working Copies", "暂无 SVN 工作副本"))
+                                : L("No Matching Repositories", "无匹配的版本库"),
+                            subtitle: selectedVcsTab == .git
+                                ? L("Drop Git repositories here or click + below to add or clone.", "可将 Git 版本库拖放到此处，或点击下方 + 按钮添加或克隆。")
+                                : L("Drop SVN working copies here or click + below to add or checkout.", "可将 SVN 工作副本拖放到此处，或点击下方 + 按钮添加或签出。")
+                        )
+                        .frame(minHeight: 130)
                     } else {
                         ForEach(filteredRepositories) { repo in
                             RepositoryRowView(repo: repo) {
@@ -58,6 +74,10 @@ struct RepositoriesTabView: View {
                                 }
                             }
                             .tag(repo.id)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) {
+                                openAction(.showLog, repo: repo)
+                            }
                             .contextMenu {
                                 repoContextMenu(for: repo)
                             }
@@ -247,6 +267,9 @@ struct RepositoriesTabView: View {
                     Button(L("Modifications", "检测改动")) {
                         openAction(.checkForModifications, repo: repo)
                     }
+                    Button(L("Repo-browser", "版本库浏览器")) {
+                        openAction(.repoBrowser, repo: repo)
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -263,7 +286,12 @@ struct RepositoriesTabView: View {
     }
 
     private var filteredRepositories: [RepositoryEntry] {
-        selectedVcsTab == .git ? gitRepositories : svnRepositories
+        let base = selectedVcsTab == .git ? gitRepositories : svnRepositories
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return base }
+        return base.filter {
+            $0.name.localizedCaseInsensitiveContains(q) || $0.path.localizedCaseInsensitiveContains(q)
+        }
     }
 
     private var selectedRepo: RepositoryEntry? {
@@ -402,6 +430,7 @@ private struct RepositoryRowView: View {
 
     var body: some View {
         let snap = AppContainer.shared.storage.loadStatusSnapshot(for: repo.path)
+        let dirtyCount = snap?.fileStatuses.values.filter { $0.isActionableChange }.count ?? 0
         HStack(spacing: 10) {
             Image(systemName: repo.vcsType == .git ? "arrow.triangle.branch" : "server.rack")
                 .foregroundColor(.accentColor)
@@ -411,15 +440,25 @@ private struct RepositoryRowView: View {
                     Text(repo.name)
                         .fontWeight(.medium)
                     Text(repo.vcsType.displayName)
-                        .font(.caption2)
+                        .font(.caption2.weight(.medium))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
                         .cornerRadius(3)
                     if let branch = snap?.branchName, !branch.isEmpty {
                         Text(branch)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    }
+                    if let state = snap?.repoState, state != .normal {
+                        Text(state.rawValue.uppercased())
+                            .font(.system(size: 9.5, weight: .bold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.orange.opacity(0.18))
+                            .foregroundColor(.orange)
+                            .cornerRadius(3)
                     }
                     if repo.isAutoDiscovered {
                         Text(L("Auto", "自动发现"))
@@ -434,6 +473,15 @@ private struct RepositoryRowView: View {
                     .truncationMode(.middle)
             }
             Spacer()
+            if snap != nil {
+                Text(dirtyCount == 0 ? L("Clean", "干净") : String(format: L("%d changed", "%d 项改动"), dirtyCount))
+                    .font(.system(size: 10.5, weight: .medium).monospacedDigit())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background((dirtyCount == 0 ? Color.green : Color.orange).opacity(0.13))
+                    .foregroundColor(dirtyCount == 0 ? .green : .orange)
+                    .cornerRadius(4)
+            }
             Button(action: onToggleStar) {
                 Image(systemName: repo.isStarred ? "star.fill" : "star")
                     .font(.system(size: 13))

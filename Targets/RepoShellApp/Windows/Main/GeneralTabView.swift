@@ -147,7 +147,18 @@ struct GeneralTabView: View {
             }
 
             // Status Colors
-            Section(header: Text(L("Status Text Colors (Light / Dark)", "状态列表文字颜色（浅色 / 深色）"))) {
+            Section(header: HStack {
+                Text(L("Status Text Colors (Light / Dark)", "状态列表文字颜色（浅色 / 深色）"))
+                Spacer()
+                Button(L("Reset Defaults", "恢复默认")) {
+                    repoManager.updatePreferences { prefs in
+                        prefs.lightColors = StatusTextColors.defaultLight
+                        prefs.darkColors = StatusTextColors.defaultDark
+                    }
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }) {
                 StatusColorEditorRow(
                     title: L("Light Mode", "浅色模式"),
                     colors: binding(\.lightColors)

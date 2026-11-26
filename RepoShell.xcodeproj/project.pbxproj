@@ -11,6 +11,7 @@
 		66F3912B2A6E1C9E813C6829 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B0A218368B5BC0066AC54D8; };
 		4DAB7D7B575576E6FAD7A0C6 /* AppUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA10662246A0DA28C9789AA4; };
 		6795E40CCFB283B7E72C8C07 /* CommitFilesTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CB4BC9BF89FCC69BF46D60A; };
+		4C2A221BBD73CCEB22C5FCCD /* SharedUIComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7460AD5139615E2CD0B5D112; };
 		DFE3B53590CE8334CA8C8BAF /* WindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DBA2D3FD82FBF35E107291; };
 		6FCADFB6BEED21836F74E474 /* WindowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0FD9D048521105B0C5B66EB; };
 		F4FC5D71F2AE23D40EEA7B3B /* AuthWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FCDBD591781CE007D7CAA17; };
@@ -116,6 +117,7 @@
 		5B0A218368B5BC0066AC54D8 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/AppDelegate.swift"; sourceTree = "<group>"; };
 		CA10662246A0DA28C9789AA4 /* AppUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/AppUpdateController.swift"; sourceTree = "<group>"; };
 		6CB4BC9BF89FCC69BF46D60A /* CommitFilesTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/CommitFilesTableView.swift"; sourceTree = "<group>"; };
+		7460AD5139615E2CD0B5D112 /* SharedUIComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/SharedUIComponents.swift"; sourceTree = "<group>"; };
 		92DBA2D3FD82FBF35E107291 /* WindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/WindowCoordinator.swift"; sourceTree = "<group>"; };
 		B0FD9D048521105B0C5B66EB /* WindowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Core/WindowHost.swift"; sourceTree = "<group>"; };
 		8FCDBD591781CE007D7CAA17 /* AuthWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Targets/RepoShellApp/Windows/Advanced/AuthWindows.swift"; sourceTree = "<group>"; };
@@ -226,6 +228,7 @@
 				5B0A218368B5BC0066AC54D8,
 				CA10662246A0DA28C9789AA4,
 				6CB4BC9BF89FCC69BF46D60A,
+				7460AD5139615E2CD0B5D112,
 				92DBA2D3FD82FBF35E107291,
 				B0FD9D048521105B0C5B66EB,
 				8FCDBD591781CE007D7CAA17,
@@ -478,6 +481,7 @@
 				66F3912B2A6E1C9E813C6829,
 				4DAB7D7B575576E6FAD7A0C6,
 				6795E40CCFB283B7E72C8C07,
+				4C2A221BBD73CCEB22C5FCCD,
 				DFE3B53590CE8334CA8C8BAF,
 				6FCADFB6BEED21836F74E474,
 				F4FC5D71F2AE23D40EEA7B3B,

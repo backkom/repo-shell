@@ -15,6 +15,8 @@ struct SvnRepoBrowserWindowView: View {
     @State private var revision: String = "HEAD"
     @State private var repoRootURL: String = ""
     @State private var entries: [VcsTreeEntry] = []
+    @State private var folderCache: [String: [VcsTreeEntry]] = [:]
+    @State private var expandedURLs: Set<String> = []
     @State private var selectedEntryID: String?
     @State private var isLoading: Bool = false
     @State private var promptMode: BrowserPromptMode?
@@ -100,94 +102,165 @@ struct SvnRepoBrowserWindowView: View {
 
             Divider()
 
-            if isLoading && entries.isEmpty {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if entries.isEmpty {
-                EmptyStateBox(
-                    systemImage: "sidebar.squares.left",
-                    title: L("Empty Directory", "空目录"),
-                    subtitle: currentURL
-                )
-            } else {
-                List(sortedEntries, selection: $selectedEntryID) { entry in
-                    HStack(spacing: 8) {
-                        Image(systemName: entry.kind == .tree ? "folder.fill" : "doc.text")
-                            .foregroundColor(entry.kind == .tree ? .accentColor : .secondary)
-                        Text(entry.name)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(entry.objectHash)
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
-                            .frame(width: 72, alignment: .trailing)
-                        Text(entry.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "")
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
-                            .frame(width: 80, alignment: .trailing)
+            // Breadcrumb bar
+            if !currentURL.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "server.rack")
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                    let rootBase = effectiveRootURL
+                    Button(URL(string: rootBase)?.lastPathComponent ?? rootBase) {
+                        selectTreeURL(rootBase)
                     }
-                    .tag(entry.id)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        if entry.kind == .tree {
-                            currentURL = urlForEntry(entry)
-                            loadDirectory()
-                        } else {
-                            extractAndOpen(entry)
+                    .buttonStyle(.link)
+                    let relSegs = relativeBreadcrumbSegments
+                    ForEach(Array(relSegs.enumerated()), id: \.offset) { idx, seg in
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                        Button(seg) {
+                            let target = ([rootBase] + relSegs[0...idx]).joined(separator: "/")
+                            selectTreeURL(target)
                         }
+                        .buttonStyle(.link)
                     }
-                    .contextMenu {
-                        let targetURL = urlForEntry(entry)
-                        if entry.kind == .tree {
-                            Button(L("Open Folder", "打开目录")) {
-                                currentURL = targetURL
-                                loadDirectory()
-                            }
-                        } else {
-                            Button(L("Open / Extract File…", "打开 / 提取文件…")) {
-                                extractAndOpen(entry)
-                            }
-                            Button(L("Blame…", "追溯…")) {
-                                AppContainer.shared.windowCoordinator.openBlameResult(
-                                    repoPath: repoPath ?? "",
-                                    filePath: targetURL,
-                                    revision: revision,
-                                    ignoreWhitespace: false,
-                                    hideAuthorAndDate: false
-                                )
-                            }
-                        }
-                        Divider()
-                        Button(L("Show Log", "显示日志")) {
-                            AppContainer.shared.windowCoordinator.openSvnLog(repoPath: repoPath, target: targetURL)
-                        }
-                        Button(L("View Properties…", "查看属性…")) {
-                            AppContainer.shared.windowCoordinator.presentWindow(
-                                key: "svn-props-\(targetURL)",
-                                title: L("Properties", "属性") + " — \(entry.name)",
-                                size: NSSize(width: 620, height: 420),
-                                view: SvnPropertiesWindowView(repoPath: repoPath, target: targetURL, isRemoteURL: true)
+                    Spacer()
+                }
+                .font(.system(size: 12))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+
+                Divider()
+            }
+
+            HSplitView {
+                // Left Pane: Remote SVN Folder Tree
+                ScrollView {
+                    if !effectiveRootURL.isEmpty {
+                        LazyVStack(alignment: .leading, spacing: 1) {
+                            SvnFolderTreeRow(
+                                folderURL: effectiveRootURL,
+                                name: URL(string: effectiveRootURL)?.lastPathComponent ?? effectiveRootURL,
+                                depth: 0,
+                                currentURL: currentURL,
+                                expandedURLs: $expandedURLs,
+                                folderCache: folderCache,
+                                onSelect: selectTreeURL,
+                                onToggleExpand: toggleExpandTree
                             )
                         }
-                        Divider()
-                        Button(L("Copy / Tag to…", "拷贝 / 打标签到…")) {
-                            promptMode = .copyOrMove(sourceURL: targetURL, isMove: false)
+                        .padding(6)
+                    }
+                }
+                .frame(minWidth: 185, idealWidth: 225, maxWidth: 320)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
+
+                // Right Pane: Directory Listing Table
+                VStack(spacing: 0) {
+                    TableColumnHeaderBar(
+                        columns: [
+                            TableColumnSpec(L("Name", "名称")),
+                            TableColumnSpec(L("Revision", "修订"), width: 72, alignment: .trailing),
+                            TableColumnSpec(L("Size", "大小"), width: 80, alignment: .trailing)
+                        ],
+                        horizontalPadding: 12,
+                        spacing: 8
+                    )
+
+                    if isLoading && entries.isEmpty {
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if entries.isEmpty {
+                        EmptyStateBox(
+                            systemImage: "sidebar.squares.left",
+                            title: L("Empty Directory", "空目录"),
+                            subtitle: currentURL
+                        )
+                    } else {
+                        List(sortedEntries, selection: $selectedEntryID) { entry in
+                            HStack(spacing: 8) {
+                                FileTypeIconView(path: entry.name, isDirectory: entry.kind == .tree)
+                                Text(entry.name)
+                                    .font(.system(size: 12.5))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(entry.objectHash)
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 72, alignment: .trailing)
+                                Text(entry.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 80, alignment: .trailing)
+                            }
+                            .tag(entry.id)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) {
+                                if entry.kind == .tree {
+                                    selectTreeURL(urlForEntry(entry))
+                                } else {
+                                    extractAndOpen(entry)
+                                }
+                            }
+                            .contextMenu {
+                                let targetURL = urlForEntry(entry)
+                                if entry.kind == .tree {
+                                    Button(L("Open Folder", "打开目录")) {
+                                        selectTreeURL(targetURL)
+                                    }
+                                } else {
+                                    Button(L("Open / Extract File…", "打开 / 提取文件…")) {
+                                        extractAndOpen(entry)
+                                    }
+                                    Button(L("Blame…", "追溯…")) {
+                                        AppContainer.shared.windowCoordinator.openBlameResult(
+                                            repoPath: repoPath ?? "",
+                                            filePath: targetURL,
+                                            revision: revision,
+                                            ignoreWhitespace: false,
+                                            hideAuthorAndDate: false
+                                        )
+                                    }
+                                }
+                                Divider()
+                                Button(L("Show Log", "显示日志")) {
+                                    AppContainer.shared.windowCoordinator.openSvnLog(repoPath: repoPath, target: targetURL)
+                                }
+                                Button(L("View Properties…", "查看属性…")) {
+                                    AppContainer.shared.windowCoordinator.presentWindow(
+                                        key: "svn-props-\(targetURL)",
+                                        title: L("Properties", "属性") + " — \(entry.name)",
+                                        size: NSSize(width: 620, height: 420),
+                                        view: SvnPropertiesWindowView(repoPath: repoPath, target: targetURL, isRemoteURL: true)
+                                    )
+                                }
+                                Divider()
+                                Button(L("Copy / Tag to…", "拷贝 / 打标签到…")) {
+                                    promptMode = .copyOrMove(sourceURL: targetURL, isMove: false)
+                                }
+                                Button(L("Move / Rename…", "移动 / 重命名…")) {
+                                    promptMode = .copyOrMove(sourceURL: targetURL, isMove: true)
+                                }
+                                Button(L("Delete…", "删除…")) {
+                                    promptMode = .delete(urls: [targetURL])
+                                }
+                                Divider()
+                                Button(L("Checkout…", "签出…")) {
+                                    AppContainer.shared.windowCoordinator.openSvnCheckout(initialURL: targetURL)
+                                }
+                                Button(L("Export…", "导出…")) {
+                                    AppContainer.shared.windowCoordinator.openSvnExport(source: targetURL, revision: revision)
+                                }
+                                Button(L("Copy URL", "拷贝 URL")) {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(targetURL, forType: .string)
+                                }
+                            }
                         }
-                        Button(L("Move / Rename…", "移动 / 重命名…")) {
-                            promptMode = .copyOrMove(sourceURL: targetURL, isMove: true)
-                        }
-                        Button(L("Delete…", "删除…")) {
-                            promptMode = .delete(urls: [targetURL])
-                        }
-                        Divider()
-                        Button(L("Checkout…", "签出…")) {
-                            AppContainer.shared.windowCoordinator.openSvnCheckout(initialURL: targetURL)
-                        }
-                        Button(L("Export…", "导出…")) {
-                            AppContainer.shared.windowCoordinator.openSvnExport(source: targetURL, revision: revision)
-                        }
-                        Button(L("Copy URL", "拷贝 URL")) {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(targetURL, forType: .string)
-                        }
+                        .listStyle(.inset)
+                        .environment(\.defaultMinListRowHeight, 22)
                     }
                 }
             }
@@ -239,10 +312,51 @@ struct SvnRepoBrowserWindowView: View {
         return "\(base)/\(entry.name)"
     }
 
+    private var effectiveRootURL: String {
+        let raw = repoRootURL.isEmpty ? currentURL : repoRootURL
+        return raw.hasSuffix("/") ? String(raw.dropLast()) : raw
+    }
+
+    private var relativeBreadcrumbSegments: [String] {
+        let root = effectiveRootURL
+        let cleanCur = currentURL.hasSuffix("/") ? String(currentURL.dropLast()) : currentURL
+        guard cleanCur.hasPrefix(root), cleanCur.count > root.count else { return [] }
+        let suffix = String(cleanCur.dropFirst(root.count))
+        return suffix.split(separator: "/").map(String.init)
+    }
+
+    private func selectTreeURL(_ url: String) {
+        currentURL = url
+        expandedURLs.insert(effectiveRootURL)
+        expandedURLs.insert(url)
+        loadDirectory()
+    }
+
+    private func toggleExpandTree(_ url: String) {
+        if expandedURLs.contains(url) {
+            expandedURLs.remove(url)
+        } else {
+            expandedURLs.insert(url)
+            if folderCache[url] == nil {
+                let rev = revision.isEmpty ? nil : revision
+                Task {
+                    if let res = try? await AppContainer.shared.runSvnInteractive(repoPath: repoPath, targetURL: url, { env, auth in
+                        try await AppContainer.shared.svnProvider.listURL(url, revision: rev, environment: env, auth: auth)
+                    }) {
+                        self.folderCache[url] = res.filter { $0.kind == .tree }.sorted {
+                            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func initializeAndLoad() {
         revision = initialRevision
         if !initialURL.isEmpty {
             currentURL = initialURL
+            expandedURLs.insert(initialURL)
             loadDirectory()
             return
         }
@@ -251,6 +365,8 @@ struct SvnRepoBrowserWindowView: View {
             if let info = try? await AppContainer.shared.svnProvider.info(target: repoPath, workingDirectory: repoPath) {
                 self.currentURL = info.url
                 self.repoRootURL = info.repositoryRoot
+                self.expandedURLs.insert(info.repositoryRoot)
+                self.expandedURLs.insert(info.url)
                 loadDirectory()
             }
         }
@@ -259,7 +375,7 @@ struct SvnRepoBrowserWindowView: View {
     private func loadDirectory() {
         guard !currentURL.isEmpty else { return }
         isLoading = true
-        let target = currentURL
+        let target = currentURL.hasSuffix("/") ? String(currentURL.dropLast()) : currentURL
         let rev = revision.isEmpty ? nil : revision
         Task {
             defer { isLoading = false }
@@ -268,6 +384,9 @@ struct SvnRepoBrowserWindowView: View {
                     try await AppContainer.shared.svnProvider.listURL(target, revision: rev, environment: env, auth: auth)
                 }
                 self.entries = res
+                self.folderCache[target] = res.filter { $0.kind == .tree }.sorted {
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
             } catch {
                 AlertHelper.showError(error)
             }
@@ -283,6 +402,75 @@ struct SvnRepoBrowserWindowView: View {
                 NSWorkspace.shared.open(temp)
             } catch {
                 AlertHelper.showError(error)
+            }
+        }
+    }
+}
+
+private struct SvnFolderTreeRow: View {
+    let folderURL: String
+    let name: String
+    let depth: Int
+    let currentURL: String
+    @Binding var expandedURLs: Set<String>
+    let folderCache: [String: [VcsTreeEntry]]
+    let onSelect: (String) -> Void
+    let onToggleExpand: (String) -> Void
+
+    var body: some View {
+        let cleanCur = currentURL.hasSuffix("/") ? String(currentURL.dropLast()) : currentURL
+        let cleanSelf = folderURL.hasSuffix("/") ? String(folderURL.dropLast()) : folderURL
+        let isSelected = cleanCur == cleanSelf
+        let isExpanded = expandedURLs.contains(cleanSelf) || expandedURLs.contains(folderURL)
+        let children = folderCache[cleanSelf] ?? []
+
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                Button {
+                    onToggleExpand(cleanSelf)
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 14, height: 14)
+                }
+                .buttonStyle(.plain)
+
+                Image(systemName: isExpanded ? "folder.fill" : "folder")
+                    .font(.system(size: 12))
+                    .foregroundColor(.accentColor)
+
+                Text(name)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, CGFloat(depth) * 14 + 4)
+            .padding(.trailing, 6)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onSelect(cleanSelf)
+            }
+
+            if isExpanded {
+                ForEach(children) { child in
+                    SvnFolderTreeRow(
+                        folderURL: "\(cleanSelf)/\(child.name)",
+                        name: child.name,
+                        depth: depth + 1,
+                        currentURL: currentURL,
+                        expandedURLs: $expandedURLs,
+                        folderCache: folderCache,
+                        onSelect: onSelect,
+                        onToggleExpand: onToggleExpand
+                    )
+                }
             }
         }
     }
@@ -1203,6 +1391,15 @@ struct SvnCompareRevisionsWindowView: View {
 
             Divider()
 
+            TableColumnHeaderBar(
+                columns: [
+                    TableColumnSpec("", width: 24, alignment: .center),
+                    TableColumnSpec(L("Path", "路径"))
+                ],
+                horizontalPadding: 12,
+                spacing: 8
+            )
+
             if isLoading && changedPaths.isEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if changedPaths.isEmpty {
@@ -1214,13 +1411,16 @@ struct SvnCompareRevisionsWindowView: View {
             } else {
                 List(changedPaths, selection: $selectedID) { ch in
                     HStack(spacing: 8) {
-                        Text(ch.action)
-                            .font(.caption.monospaced().weight(.bold))
+                        VcsActionBadge(action: ch.action)
                             .frame(width: 24)
+                        FileTypeIconView(path: ch.path)
                         Text(ch.path)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.system(size: 12.5))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                         Spacer()
                     }
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .tag(ch.id)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
