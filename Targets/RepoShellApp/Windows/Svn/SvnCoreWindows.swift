@@ -269,6 +269,9 @@ struct SvnCommitWindowView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .onAppear(perform: refresh)
+        .onDisappear {
+            AppContainer.shared.triggerRefresh(repoPath: repoPath)
+        }
     }
 
     private var availableChangelistNames: [String] {
@@ -412,6 +415,7 @@ struct SvnCommitWindowView: View {
                     return st != .normal && st != .ignored && st != .external
                 }
                 self.items = committable
+                AppContainer.shared.triggerRefresh(repoPath: repoPath)
 
                 let normRepo = PathUtils.normalize(repoPath)
                 let preSet = Set(preselectedPaths.map { PathUtils.normalize($0) })

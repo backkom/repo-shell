@@ -24,9 +24,12 @@ final class AppContainer: ObservableObject {
     let windowCoordinator: WindowCoordinator
     let updateController: AppUpdateController
     @Published private(set) var isFinderExtensionEnabled: Bool?
+    @Published private(set) var statusSnapshots: [String: RepoStatusSnapshot] = [:]
     private(set) var askpassServer: AskpassIPCServer?
     private var extensionStatusCheckTask: Task<Bool, Never>?
     private var extensionStatusGeneration = 0
+    private var statusObserver: NSObjectProtocol?
+    private var distributedStatusObserver: NSObjectProtocol?
 
     private init() {
         let storage = SharedStorage.shared
@@ -57,11 +60,43 @@ final class AppContainer: ObservableObject {
         self.windowCoordinator = WindowCoordinator()
         self.updateController = AppUpdateController(storage: storage)
         self.isFinderExtensionEnabled = FIFinderSyncController.isExtensionEnabled ? true : nil
+
+        var initialSnapshots: [String: RepoStatusSnapshot] = [:]
+        for repo in repositoryManager.config.repositories {
+            let norm = PathUtils.normalize(repo.path)
+            if let snap = storage.loadStatusSnapshot(for: norm) {
+                initialSnapshots[norm] = snap
+            }
+        }
+        self.statusSnapshots = initialSnapshots
+
+        self.statusObserver = NotificationCenter.default.addObserver(
+            forName: AppConstants.DistributedNotification.statusDidUpdate.cfName,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let repoPath = note.userInfo?["repoPath"] as? String
+            Task { @MainActor in
+                self?.reloadStatusSnapshot(for: repoPath)
+            }
+        }
     }
 
     func startBackgroundServices() {
         statusEngine.start()
         updateController.start()
+        if distributedStatusObserver == nil {
+            distributedStatusObserver = DistributedNotificationCenter.default().addObserver(
+                forName: AppConstants.DistributedNotification.statusDidUpdate.cfName,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                let repoPath = note.userInfo?["repoPath"] as? String
+                Task { @MainActor in
+                    self?.reloadStatusSnapshot(for: repoPath)
+                }
+            }
+        }
         let server = AskpassIPCServer(storage: storage) { [weak self] request in
             guard let self = self else {
                 return AskpassIPCResponse(approved: false)
@@ -75,8 +110,37 @@ final class AppContainer: ObservableObject {
     func stopBackgroundServices() {
         updateController.stop()
         statusEngine.stop()
+        if let obs = distributedStatusObserver {
+            DistributedNotificationCenter.default().removeObserver(obs)
+            distributedStatusObserver = nil
+        }
         askpassServer?.stop()
         askpassServer = nil
+    }
+
+    func statusSnapshot(for repoPath: String) -> RepoStatusSnapshot? {
+        let norm = PathUtils.normalize(repoPath)
+        return statusSnapshots[norm] ?? storage.loadStatusSnapshot(for: norm)
+    }
+
+    func reloadStatusSnapshot(for repoPath: String?) {
+        if let repoPath {
+            let norm = PathUtils.normalize(repoPath)
+            if let snap = storage.loadStatusSnapshot(for: norm) {
+                statusSnapshots[norm] = snap
+            } else {
+                statusSnapshots.removeValue(forKey: norm)
+            }
+        } else {
+            var next: [String: RepoStatusSnapshot] = [:]
+            for repo in repositoryManager.config.repositories {
+                let norm = PathUtils.normalize(repo.path)
+                if let snap = storage.loadStatusSnapshot(for: norm) {
+                    next[norm] = snap
+                }
+            }
+            statusSnapshots = next
+        }
     }
 
     func localized(_ key: String) -> String {

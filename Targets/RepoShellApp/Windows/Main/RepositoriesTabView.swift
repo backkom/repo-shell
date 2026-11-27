@@ -8,6 +8,7 @@ enum RepoVcsSubtab: String, CaseIterable {
 }
 
 struct RepositoriesTabView: View {
+    @ObservedObject private var appContainer = AppContainer.shared
     @ObservedObject private var repoManager = AppContainer.shared.repositoryManager
     @State private var selectedVcsTab: RepoVcsSubtab = .git
     @State private var selectedRepoID: UUID?
@@ -70,6 +71,8 @@ struct RepositoriesTabView: View {
                         ForEach(filteredRepositories) { repo in
                             RepositoryRowView(
                                 repo: repo,
+                                snapshot: appContainer.statusSnapshot(for: repo.path),
+                                isSelected: selectedRepoID == repo.id,
                                 onToggleStar: {
                                     withAnimation(.easeInOut(duration: 0.18)) {
                                         repoManager.toggleStar(id: repo.id)
@@ -278,6 +281,10 @@ struct RepositoriesTabView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
+        .onAppear {
+            appContainer.reloadStatusSnapshot(for: nil)
+            appContainer.triggerRefresh(repoPath: nil)
+        }
     }
 
     private var gitRepositories: [RepositoryEntry] {
@@ -428,17 +435,52 @@ struct RepositoriesTabView: View {
 
 private struct RepositoryRowView: View {
     let repo: RepositoryEntry
+    let snapshot: RepoStatusSnapshot?
+    let isSelected: Bool
     let onToggleStar: () -> Void
     let onDoubleClick: () -> Void
     @State private var isStarHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    private var isActivelySelected: Bool {
+        isSelected && controlActiveState != .inactive
+    }
+
+    private var cleanBadgeForeground: Color {
+        if isActivelySelected { return .white }
+        return colorScheme == .dark
+            ? Color(red: 0.38, green: 0.80, blue: 0.64)
+            : Color(red: 0.11, green: 0.49, blue: 0.37)
+    }
+
+    private var cleanBadgeBackground: Color {
+        if isActivelySelected { return Color.white.opacity(0.20) }
+        return colorScheme == .dark
+            ? Color(red: 0.32, green: 0.78, blue: 0.60).opacity(0.16)
+            : Color(red: 0.12, green: 0.55, blue: 0.41).opacity(0.10)
+    }
+
+    private var changedBadgeForeground: Color {
+        if isActivelySelected { return .white }
+        return colorScheme == .dark
+            ? Color(red: 0.98, green: 0.52, blue: 0.42)
+            : Color(red: 0.78, green: 0.28, blue: 0.18)
+    }
+
+    private var changedBadgeBackground: Color {
+        if isActivelySelected { return Color.white.opacity(0.22) }
+        return colorScheme == .dark
+            ? Color(red: 0.95, green: 0.46, blue: 0.36).opacity(0.18)
+            : Color(red: 0.86, green: 0.33, blue: 0.22).opacity(0.11)
+    }
 
     var body: some View {
-        let snap = AppContainer.shared.storage.loadStatusSnapshot(for: repo.path)
-        let dirtyCount = snap?.fileStatuses.values.filter { $0.isActionableChange }.count ?? 0
+        let dirtyCount = snapshot?.fileStatuses.values.filter { $0.isActionableChange }.count ?? 0
         HStack(spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: repo.vcsType == .git ? "arrow.triangle.branch" : "server.rack")
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(isActivelySelected ? .white : .accentColor)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -448,43 +490,43 @@ private struct RepositoryRowView: View {
                             .font(.caption2.weight(.medium))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Color.accentColor.opacity(0.12))
-                            .foregroundColor(.accentColor)
+                            .background(isActivelySelected ? Color.white.opacity(0.22) : Color.accentColor.opacity(0.12))
+                            .foregroundColor(isActivelySelected ? .white : .accentColor)
                             .cornerRadius(3)
-                        if let branch = snap?.branchName, !branch.isEmpty {
+                        if let branch = snapshot?.branchName, !branch.isEmpty {
                             Text(branch)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(isActivelySelected ? .white.opacity(0.85) : .secondary)
                         }
-                        if let state = snap?.repoState, state != .normal {
+                        if let state = snapshot?.repoState, state != .normal {
                             Text(state.rawValue.uppercased())
                                 .font(.system(size: 9.5, weight: .bold))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(Color.orange.opacity(0.18))
-                                .foregroundColor(.orange)
+                                .background(changedBadgeBackground)
+                                .foregroundColor(changedBadgeForeground)
                                 .cornerRadius(3)
                         }
                         if repo.isAutoDiscovered {
                             Text(L("Auto", "自动发现"))
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(isActivelySelected ? .white.opacity(0.80) : .secondary)
                         }
                     }
                     Text(repo.path)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(isActivelySelected ? .white.opacity(0.85) : .secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 Spacer()
-                if snap != nil {
+                if snapshot != nil {
                     Text(dirtyCount == 0 ? L("Clean", "干净") : String(format: L("%d changed", "%d 项改动"), dirtyCount))
                         .font(.system(size: 10.5, weight: .medium).monospacedDigit())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background((dirtyCount == 0 ? Color.green : Color.orange).opacity(0.13))
-                        .foregroundColor(dirtyCount == 0 ? .green : .orange)
+                        .background(dirtyCount == 0 ? cleanBadgeBackground : changedBadgeBackground)
+                        .foregroundColor(dirtyCount == 0 ? cleanBadgeForeground : changedBadgeForeground)
                         .cornerRadius(4)
                 }
             }
@@ -497,7 +539,9 @@ private struct RepositoryRowView: View {
                     .foregroundColor(
                         repo.isStarred
                             ? Color(red: 0.96, green: 0.68, blue: 0.08)
-                            : Color.secondary.opacity(isStarHovered ? 0.85 : 0.4)
+                            : (isActivelySelected
+                                ? Color.white.opacity(isStarHovered ? 0.95 : 0.65)
+                                : Color.secondary.opacity(isStarHovered ? 0.85 : 0.4))
                     )
                     .frame(width: 24, height: 24)
                     .contentShape(Rectangle())

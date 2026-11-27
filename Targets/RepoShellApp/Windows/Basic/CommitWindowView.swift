@@ -404,6 +404,9 @@ struct CommitWindowView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .task { await reload() }
+        .onDisappear {
+            AppContainer.shared.triggerRefresh(repoPath: repoPath)
+        }
     }
 
     private func openDiffOrFile(_ row: CommitFileRow) {
@@ -494,6 +497,7 @@ struct CommitWindowView: View {
             behindCount = res.behindCount
             repoState = res.repoState
             items = res.items
+            AppContainer.shared.triggerRefresh(repoPath: repoPath)
 
             if selectedPaths.isEmpty {
                 let normRepo = PathUtils.normalize(repoPath)

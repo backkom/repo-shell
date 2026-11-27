@@ -101,6 +101,7 @@ struct MainWindowView: View {
             Task {
                 _ = await AppContainer.shared.refreshFinderExtensionStatus()
             }
+            AppContainer.shared.triggerRefresh(repoPath: nil)
         }
     }
 }

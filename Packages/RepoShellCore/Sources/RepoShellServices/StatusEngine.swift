@@ -15,6 +15,7 @@ public final class StatusEngine: @unchecked Sendable {
     private var watchedPaths: [String] = []
     private var debounceTimers: [String: DispatchWorkItem] = [:]
     private var inFlightRepos: Set<String> = []
+    private var pendingRefreshes: Set<String> = []
     private var configObserver: NSObjectProtocol?
     private var refreshObserver: NSObjectProtocol?
 
@@ -97,7 +98,9 @@ public final class StatusEngine: @unchecked Sendable {
             return
         }
         defer {
-            endRefresh(repoPath: norm)
+            if endRefresh(repoPath: norm) {
+                scheduleRefresh(forRepo: norm, delay: 0.05)
+            }
         }
 
         let matchedRepo = cfg.repositories.first(where: { PathUtils.normalize($0.path) == norm })
@@ -131,6 +134,11 @@ public final class StatusEngine: @unchecked Sendable {
 
         try? storage.saveStatusSnapshot(snapshot)
         finderTagService.applyTagsIfNeeded(for: snapshot, preferences: prefs)
+        NotificationCenter.default.post(
+            name: AppConstants.DistributedNotification.statusDidUpdate.cfName,
+            object: nil,
+            userInfo: ["repoPath": norm]
+        )
         AppConstants.postDistributed(.statusDidUpdate, userInfo: ["repoPath": norm])
     }
 
@@ -223,6 +231,7 @@ public final class StatusEngine: @unchecked Sendable {
     private func tryBeginRefresh(repoPath: String) -> Bool {
         stateLock.withLock {
             if inFlightRepos.contains(repoPath) {
+                pendingRefreshes.insert(repoPath)
                 return false
             }
             inFlightRepos.insert(repoPath)
@@ -230,9 +239,10 @@ public final class StatusEngine: @unchecked Sendable {
         }
     }
 
-    private func endRefresh(repoPath: String) {
-        _ = stateLock.withLock {
+    private func endRefresh(repoPath: String) -> Bool {
+        stateLock.withLock {
             inFlightRepos.remove(repoPath)
+            return pendingRefreshes.remove(repoPath) != nil
         }
     }
 
