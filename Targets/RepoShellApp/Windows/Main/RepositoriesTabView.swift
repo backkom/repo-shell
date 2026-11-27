@@ -68,16 +68,19 @@ struct RepositoriesTabView: View {
                         .frame(minHeight: 130)
                     } else {
                         ForEach(filteredRepositories) { repo in
-                            RepositoryRowView(repo: repo) {
-                                withAnimation(.easeInOut(duration: 0.18)) {
-                                    repoManager.toggleStar(id: repo.id)
+                            RepositoryRowView(
+                                repo: repo,
+                                onToggleStar: {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        repoManager.toggleStar(id: repo.id)
+                                    }
+                                },
+                                onDoubleClick: {
+                                    openAction(.showLog, repo: repo)
                                 }
-                            }
+                            )
                             .tag(repo.id)
                             .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
-                                openAction(.showLog, repo: repo)
-                            }
                             .contextMenu {
                                 repoContextMenu(for: repo)
                             }
@@ -426,62 +429,68 @@ struct RepositoriesTabView: View {
 private struct RepositoryRowView: View {
     let repo: RepositoryEntry
     let onToggleStar: () -> Void
+    let onDoubleClick: () -> Void
     @State private var isStarHovered = false
 
     var body: some View {
         let snap = AppContainer.shared.storage.loadStatusSnapshot(for: repo.path)
         let dirtyCount = snap?.fileStatuses.values.filter { $0.isActionableChange }.count ?? 0
         HStack(spacing: 10) {
-            Image(systemName: repo.vcsType == .git ? "arrow.triangle.branch" : "server.rack")
-                .foregroundColor(.accentColor)
-                .frame(width: 20)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(repo.name)
-                        .fontWeight(.medium)
-                    Text(repo.vcsType.displayName)
-                        .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color.accentColor.opacity(0.12))
-                        .foregroundColor(.accentColor)
-                        .cornerRadius(3)
-                    if let branch = snap?.branchName, !branch.isEmpty {
-                        Text(branch)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    if let state = snap?.repoState, state != .normal {
-                        Text(state.rawValue.uppercased())
-                            .font(.system(size: 9.5, weight: .bold))
+            HStack(spacing: 10) {
+                Image(systemName: repo.vcsType == .git ? "arrow.triangle.branch" : "server.rack")
+                    .foregroundColor(.accentColor)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(repo.name)
+                            .fontWeight(.medium)
+                        Text(repo.vcsType.displayName)
+                            .font(.caption2.weight(.medium))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Color.orange.opacity(0.18))
-                            .foregroundColor(.orange)
+                            .background(Color.accentColor.opacity(0.12))
+                            .foregroundColor(.accentColor)
                             .cornerRadius(3)
+                        if let branch = snap?.branchName, !branch.isEmpty {
+                            Text(branch)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        if let state = snap?.repoState, state != .normal {
+                            Text(state.rawValue.uppercased())
+                                .font(.system(size: 9.5, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.18))
+                                .foregroundColor(.orange)
+                                .cornerRadius(3)
+                        }
+                        if repo.isAutoDiscovered {
+                            Text(L("Auto", "自动发现"))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
-                    if repo.isAutoDiscovered {
-                        Text(L("Auto", "自动发现"))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
+                    Text(repo.path)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                Text(repo.path)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                Spacer()
+                if snap != nil {
+                    Text(dirtyCount == 0 ? L("Clean", "干净") : String(format: L("%d changed", "%d 项改动"), dirtyCount))
+                        .font(.system(size: 10.5, weight: .medium).monospacedDigit())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background((dirtyCount == 0 ? Color.green : Color.orange).opacity(0.13))
+                        .foregroundColor(dirtyCount == 0 ? .green : .orange)
+                        .cornerRadius(4)
+                }
             }
-            Spacer()
-            if snap != nil {
-                Text(dirtyCount == 0 ? L("Clean", "干净") : String(format: L("%d changed", "%d 项改动"), dirtyCount))
-                    .font(.system(size: 10.5, weight: .medium).monospacedDigit())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background((dirtyCount == 0 ? Color.green : Color.orange).opacity(0.13))
-                    .foregroundColor(dirtyCount == 0 ? .green : .orange)
-                    .cornerRadius(4)
-            }
+            .padding(.vertical, 2)
+            .onListRowDoubleClick(perform: onDoubleClick)
+
             Button(action: onToggleStar) {
                 Image(systemName: repo.isStarred ? "star.fill" : "star")
                     .font(.system(size: 13))
@@ -497,6 +506,5 @@ private struct RepositoryRowView: View {
             .onHover { isStarHovered = $0 }
             .help(repo.isStarred ? L("Remove Star", "取消星标") : L("Star & Pin to Top", "星标置顶"))
         }
-        .padding(.vertical, 2)
     }
 }

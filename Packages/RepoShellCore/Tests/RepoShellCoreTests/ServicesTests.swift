@@ -308,7 +308,7 @@ final class ServicesTests: XCTestCase {
 
         XCTAssertEqual(AppConstants.developerName, "leaf")
         XCTAssertEqual(AppConstants.developerEmail, "flying_butterfly@126.com")
-        XCTAssertEqual(AppConstants.defaultVersion, "0.1.2")
+        XCTAssertEqual(AppConstants.defaultVersion, "0.1.3")
         XCTAssertEqual(AppConstants.githubRepo, "backkom/repo-shell")
 
         let releaseJSON = """

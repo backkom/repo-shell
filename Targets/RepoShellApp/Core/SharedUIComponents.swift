@@ -376,3 +376,114 @@ struct CommitGraphCellView: View {
         }
     }
 }
+
+// MARK: - List Row Double Click
+
+@MainActor
+private final class ListRowDoubleClickRegistry {
+    static let shared = ListRowDoubleClickRegistry()
+
+    private final class WeakBox {
+        weak var view: ListRowDoubleClickNSView?
+        init(_ view: ListRowDoubleClickNSView) { self.view = view }
+    }
+
+    private var entries: [ObjectIdentifier: WeakBox] = [:]
+    private var monitor: Any?
+
+    func register(_ view: ListRowDoubleClickNSView) {
+        entries[ObjectIdentifier(view)] = WeakBox(view)
+        ensureMonitor()
+    }
+
+    func unregister(_ view: ListRowDoubleClickNSView) {
+        entries.removeValue(forKey: ObjectIdentifier(view))
+        pruneAndUpdateMonitor()
+    }
+
+    private func pruneAndUpdateMonitor() {
+        entries = entries.filter { $0.value.view != nil }
+        if entries.isEmpty, let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
+    private func ensureMonitor() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            MainActor.assumeIsolated {
+                self?.handleMouseDown(event)
+            }
+            return event
+        }
+    }
+
+    private func handleMouseDown(_ event: NSEvent) {
+        guard event.clickCount == 2,
+              event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
+              let eventWindow = event.window else {
+            return
+        }
+        pruneAndUpdateMonitor()
+        let views = entries.values.compactMap(\.view)
+        for view in views {
+            guard view.window === eventWindow,
+                  !view.isHiddenOrHasHiddenAncestor else {
+                continue
+            }
+            let localPoint = view.convert(event.locationInWindow, from: nil)
+            guard view.visibleRect.contains(localPoint) else {
+                continue
+            }
+            let action = view.onDoubleClick
+            DispatchQueue.main.async {
+                action()
+            }
+            break
+        }
+    }
+}
+
+private final class ListRowDoubleClickNSView: NSView {
+    var onDoubleClick: () -> Void = {}
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            ListRowDoubleClickRegistry.shared.register(self)
+        } else {
+            ListRowDoubleClickRegistry.shared.unregister(self)
+        }
+    }
+}
+
+private struct ListRowDoubleClickRepresentable: NSViewRepresentable {
+    let onDoubleClick: () -> Void
+
+    func makeNSView(context: Context) -> ListRowDoubleClickNSView {
+        let view = ListRowDoubleClickNSView()
+        view.onDoubleClick = onDoubleClick
+        return view
+    }
+
+    func updateNSView(_ nsView: ListRowDoubleClickNSView, context: Context) {
+        nsView.onDoubleClick = onDoubleClick
+    }
+
+    static func dismantleNSView(_ nsView: ListRowDoubleClickNSView, coordinator: ()) {
+        ListRowDoubleClickRegistry.shared.unregister(nsView)
+    }
+}
+
+extension View {
+    /// Detects double-clicks inside a `List(selection:)` row without installing a SwiftUI
+    /// `TapGesture` that intercepts single-click selection on macOS.
+    func onListRowDoubleClick(perform action: @escaping () -> Void) -> some View {
+        background(ListRowDoubleClickRepresentable(onDoubleClick: action))
+    }
+}
