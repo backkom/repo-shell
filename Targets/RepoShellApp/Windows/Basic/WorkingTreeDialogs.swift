@@ -350,19 +350,11 @@ struct StashListWindowView: View {
                 EmptyStateBox(systemImage: "tray", title: L("No Stashes", "无储藏"))
             } else {
                 List(stashes, selection: $selectedRef) { s in
-                    HStack(spacing: 8) {
-                        Text(s.refName).font(.caption.monospaced()).frame(width: 90, alignment: .leading)
-                        Text(s.shortHash).font(.caption.monospaced()).foregroundColor(.secondary).frame(width: 64, alignment: .leading)
-                        Text(s.branchName).font(.caption).foregroundColor(.accentColor).frame(width: 100, alignment: .leading)
-                        Text(s.message).font(.system(size: 12.5)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                        Text(s.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
-                            .frame(width: 136, alignment: .trailing)
-                    }
-                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                    .tag(s.refName)
-                    .contextMenu {
+                    StashRowView(entry: s)
+                        .equatable()
+                        .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                        .tag(s.refName)
+                        .contextMenu {
                         Button(L("Apply Stash", "应用储藏")) { apply(s.refName, pop: false) }
                         Button(L("Pop Stash", "应用并删除 (Pop)")) { apply(s.refName, pop: true) }
                         Button(L("Branch from Stash…", "从储藏创建分支…")) {
@@ -417,6 +409,23 @@ struct StashListWindowView: View {
         Task {
             _ = try? await AppContainer.shared.gitProvider.stashDrop(repoPath: repoPath, stashRef: ref)
             await reload()
+        }
+    }
+}
+
+private struct StashRowView: View, Equatable {
+    let entry: GitStashEntry
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(entry.refName).font(.caption.monospaced()).frame(width: 90, alignment: .leading)
+            Text(entry.shortHash).font(.caption.monospaced()).foregroundColor(.secondary).frame(width: 64, alignment: .leading)
+            Text(entry.branchName).font(.caption).foregroundColor(.accentColor).frame(width: 100, alignment: .leading)
+            Text(entry.message).font(.system(size: 12.5)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+            Text(SharedDateFormatters.abbreviatedDateTime.string(from: entry.date))
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 136, alignment: .trailing)
         }
     }
 }

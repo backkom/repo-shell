@@ -120,7 +120,7 @@ final class AppContainer: ObservableObject {
 
     func statusSnapshot(for repoPath: String) -> RepoStatusSnapshot? {
         let norm = PathUtils.normalize(repoPath)
-        return statusSnapshots[norm] ?? storage.loadStatusSnapshot(for: norm)
+        return statusSnapshots[norm]
     }
 
     func reloadStatusSnapshot(for repoPath: String?) {

@@ -19,6 +19,7 @@ struct SvnRepoBrowserWindowView: View {
     @State private var expandedURLs: Set<String> = []
     @State private var selectedEntryID: String?
     @State private var isLoading: Bool = false
+    @State private var loadTask: Task<Void, Never>?
     @State private var promptMode: BrowserPromptMode?
 
     enum BrowserPromptMode: Identifiable {
@@ -177,34 +178,20 @@ struct SvnRepoBrowserWindowView: View {
                             subtitle: currentURL
                         )
                     } else {
-                        List(sortedEntries, selection: $selectedEntryID) { entry in
-                            HStack(spacing: 8) {
-                                FileTypeIconView(path: entry.name, isDirectory: entry.kind == .tree)
-                                Text(entry.name)
-                                    .font(.system(size: 12.5))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text(entry.objectHash)
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 72, alignment: .trailing)
-                                Text(entry.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 80, alignment: .trailing)
-                            }
-                            .tag(entry.id)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
-                                if entry.kind == .tree {
-                                    selectTreeURL(urlForEntry(entry))
-                                } else {
-                                    extractAndOpen(entry)
+                        List(entries, selection: $selectedEntryID) { entry in
+                            SvnRepoBrowserRowView(entry: entry)
+                                .equatable()
+                                .onListRowDoubleClick {
+                                    if entry.kind == .tree {
+                                        selectTreeURL(urlForEntry(entry))
+                                    } else {
+                                        extractAndOpen(entry)
+                                    }
                                 }
-                            }
-                            .contextMenu {
+                                .tag(entry.id)
+                                .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                                .contentShape(Rectangle())
+                                .contextMenu {
                                 let targetURL = urlForEntry(entry)
                                 if entry.kind == .tree {
                                     Button(L("Open Folder", "打开目录")) {
@@ -266,6 +253,10 @@ struct SvnRepoBrowserWindowView: View {
             }
         }
         .onAppear(perform: initializeAndLoad)
+        .onDisappear {
+            loadTask?.cancel()
+            loadTask = nil
+        }
         .sheet(item: $promptMode) { mode in
             SvnBrowserOperationSheet(
                 mode: mode,
@@ -280,8 +271,8 @@ struct SvnRepoBrowserWindowView: View {
         }
     }
 
-    private var sortedEntries: [VcsTreeEntry] {
-        entries.sorted {
+    private func sortTreeEntries(_ list: [VcsTreeEntry]) -> [VcsTreeEntry] {
+        list.sorted {
             if $0.kind != $1.kind { return $0.kind == .tree }
             return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
@@ -303,8 +294,8 @@ struct SvnRepoBrowserWindowView: View {
     private func navigateUp() {
         guard let u = URL(string: currentURL) else { return }
         let parent = u.deletingLastPathComponent().absoluteString
-        currentURL = parent.hasSuffix("/") && parent != "file:///" ? String(parent.dropLast()) : parent
-        loadDirectory()
+        let next = parent.hasSuffix("/") && parent != "file:///" ? String(parent.dropLast()) : parent
+        selectTreeURL(next)
     }
 
     private func urlForEntry(_ entry: VcsTreeEntry) -> String {
@@ -326,9 +317,15 @@ struct SvnRepoBrowserWindowView: View {
     }
 
     private func selectTreeURL(_ url: String) {
-        currentURL = url
+        let cleanTarget = url.hasSuffix("/") ? String(url.dropLast()) : url
+        let cleanCur = currentURL.hasSuffix("/") ? String(currentURL.dropLast()) : currentURL
+        if cleanTarget != cleanCur {
+            selectedEntryID = nil
+            entries = []
+        }
+        currentURL = cleanTarget
         expandedURLs.insert(effectiveRootURL)
-        expandedURLs.insert(url)
+        expandedURLs.insert(cleanTarget)
         loadDirectory()
     }
 
@@ -374,21 +371,27 @@ struct SvnRepoBrowserWindowView: View {
 
     private func loadDirectory() {
         guard !currentURL.isEmpty else { return }
+        loadTask?.cancel()
         isLoading = true
         let target = currentURL.hasSuffix("/") ? String(currentURL.dropLast()) : currentURL
         let rev = revision.isEmpty ? nil : revision
-        Task {
-            defer { isLoading = false }
+        loadTask = Task {
+            defer {
+                if !Task.isCancelled { isLoading = false }
+            }
             do {
                 let res = try await AppContainer.shared.runSvnInteractive(repoPath: repoPath, targetURL: target) { env, auth in
                     try await AppContainer.shared.svnProvider.listURL(target, revision: rev, environment: env, auth: auth)
                 }
-                self.entries = res
-                self.folderCache[target] = res.filter { $0.kind == .tree }.sorted {
-                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-                }
+                let activeTarget = currentURL.hasSuffix("/") ? String(currentURL.dropLast()) : currentURL
+                guard !Task.isCancelled, activeTarget == target else { return }
+                let sorted = sortTreeEntries(res)
+                self.entries = sorted
+                self.folderCache[target] = sorted.filter { $0.kind == .tree }
             } catch {
-                AlertHelper.showError(error)
+                if !Task.isCancelled {
+                    AlertHelper.showError(error)
+                }
             }
         }
     }
@@ -403,6 +406,29 @@ struct SvnRepoBrowserWindowView: View {
             } catch {
                 AlertHelper.showError(error)
             }
+        }
+    }
+}
+
+private struct SvnRepoBrowserRowView: View, Equatable {
+    let entry: VcsTreeEntry
+
+    var body: some View {
+        HStack(spacing: 8) {
+            FileTypeIconView(path: entry.name, isDirectory: entry.kind == .tree)
+            Text(entry.name)
+                .font(.system(size: 12.5))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(entry.objectHash)
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 72, alignment: .trailing)
+            Text(entry.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 80, alignment: .trailing)
         }
     }
 }
@@ -1009,6 +1035,7 @@ struct SvnPropertiesWindowView: View {
     @State private var editValue: String = ""
     @State private var recursive: Bool = false
     @State private var isLoading: Bool = false
+    @State private var detailUpdateTask: Task<Void, Never>?
 
     private let presetNames = [
         "svn:ignore",
@@ -1037,20 +1064,12 @@ struct SvnPropertiesWindowView: View {
 
             HSplitView {
                 List(properties, selection: $selectedName) { prop in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(prop.name).font(.headline)
-                        Text(prop.value.replacingOccurrences(of: "\n", with: " "))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                    .tag(prop.name)
+                    SvnPropertyRowView(prop: prop)
+                        .equatable()
+                        .tag(prop.name)
                 }
                 .onChange(of: selectedName) { name in
-                    if let name, let found = properties.first(where: { $0.name == name }) {
-                        editName = found.name
-                        editValue = found.value
-                    }
+                    schedulePropertyEditorUpdate(for: name)
                 }
                 .frame(minWidth: 200)
 
@@ -1094,6 +1113,25 @@ struct SvnPropertiesWindowView: View {
             }
         }
         .onAppear(perform: refresh)
+        .onDisappear {
+            detailUpdateTask?.cancel()
+            detailUpdateTask = nil
+        }
+    }
+
+    private func schedulePropertyEditorUpdate(for name: String?) {
+        detailUpdateTask?.cancel()
+        guard let name, let found = properties.first(where: { $0.name == name }) else {
+            detailUpdateTask = nil
+            return
+        }
+        detailUpdateTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 25_000_000)
+            guard !Task.isCancelled else { return }
+            editName = found.name
+            editValue = found.value
+            detailUpdateTask = nil
+        }
     }
 
     private func refresh() {
@@ -1152,6 +1190,20 @@ struct SvnPropertiesWindowView: View {
             } catch {
                 AlertHelper.showError(error)
             }
+        }
+    }
+}
+
+private struct SvnPropertyRowView: View, Equatable {
+    let prop: SvnPropertyEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(prop.name).font(.headline)
+            Text(prop.value.replacingOccurrences(of: "\n", with: " "))
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
         }
     }
 }
@@ -1410,22 +1462,14 @@ struct SvnCompareRevisionsWindowView: View {
                 )
             } else {
                 List(changedPaths, selection: $selectedID) { ch in
-                    HStack(spacing: 8) {
-                        VcsActionBadge(action: ch.action)
-                            .frame(width: 24)
-                        FileTypeIconView(path: ch.path)
-                        Text(ch.path)
-                            .font(.system(size: 12.5))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                    }
-                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                    .tag(ch.id)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        openDiff(for: ch)
-                    }
+                    SvnCompareRowView(ch: ch)
+                        .equatable()
+                        .contentShape(Rectangle())
+                        .onListRowDoubleClick {
+                            openDiff(for: ch)
+                        }
+                        .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                        .tag(ch.id)
                 }
             }
         }
@@ -1459,6 +1503,23 @@ struct SvnCompareRevisionsWindowView: View {
             leftRev: rev1,
             rightRev: rev2
         )
+    }
+}
+
+private struct SvnCompareRowView: View, Equatable {
+    let ch: VcsChangedPath
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VcsActionBadge(action: ch.action)
+                .frame(width: 24)
+            FileTypeIconView(path: ch.path)
+            Text(ch.path)
+                .font(.system(size: 12.5))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+        }
     }
 }
 

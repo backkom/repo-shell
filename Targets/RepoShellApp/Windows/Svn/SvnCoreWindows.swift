@@ -626,7 +626,7 @@ struct SvnModificationsWindowView: View {
                     .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                     .tag(entry.id)
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
+                    .onListRowDoubleClick {
                         AppContainer.shared.windowCoordinator.openDiffWithRevision(
                             repoPath: repoPath,
                             filePath: entry.item.absolutePath,
@@ -778,7 +778,11 @@ struct SvnLogWindowView: View {
     let initialPathFilter: String?
 
     @State private var commits: [VcsCommit] = []
+    @State private var commitIndexByID: [String: VcsCommit] = [:]
     @State private var selectedCommitID: String?
+    @State private var displayedCommitID: String?
+    @State private var detailUpdateTask: Task<Void, Never>?
+    @State private var loadTask: Task<Void, Never>?
     @State private var searchQuery: String = ""
     @State private var revisionRange: String = ""
     @State private var stopOnCopy: Bool = false
@@ -792,6 +796,17 @@ struct SvnLogWindowView: View {
         self.repoPath = repoPath
         self.initialPathFilter = initialPathFilter
         _targetPathFilter = State(initialValue: initialPathFilter ?? "")
+    }
+
+    private var targetSelectedCommitID: String? {
+        selectedCommitID ?? commits.first?.id
+    }
+
+    private var activeCommit: VcsCommit? {
+        if let displayedCommitID, let match = commitIndexByID[displayedCommitID] {
+            return match
+        }
+        return commits.first
     }
 
     var body: some View {
@@ -855,67 +870,26 @@ struct SvnLogWindowView: View {
                             subtitle: L("Adjust your search filter or check repository connection.", "请调整筛选条件或检查网络连接。")
                         )
                     } else {
-                        List(commits, selection: $selectedCommitID) { commit in
-                            HStack(spacing: 10) {
-                                Text(commit.shortHash)
-                                    .font(.caption.monospaced().weight(.semibold))
-                                    .foregroundColor(.accentColor)
-                                    .frame(width: 72, alignment: .leading)
-
-                                Text(commit.author)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 100, alignment: .leading)
-                                    .lineLimit(1)
-
-                                Text(commit.subject)
-                                    .font(.system(size: 12.5))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                                Text(commit.date.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 140, alignment: .trailing)
+                        LogCommitsTableView(
+                            commits: commits,
+                            selectedCommitIDs: Binding(
+                                get: { selectedCommitID.map { [$0] } ?? [] },
+                                set: { selectedCommitID = $0.first }
+                            ),
+                            layoutStyle: .svn,
+                            showsGraph: false,
+                            allowsMultipleSelection: false,
+                            shaWidth: 72,
+                            authorWidth: 100,
+                            dateWidth: 140,
+                            horizontalPadding: 12,
+                            columnSpacing: 10,
+                            onPopulateContextMenu: { clickedCommit, _, menu in
+                                populateSvnLogContextMenu(menu, commit: clickedCommit)
                             }
-                            .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                            .tag(commit.id)
-                            .contextMenu {
-                                Button(L("Update Working Copy to Revision %@", "更新工作副本至 r%@")
-                                    .replacingOccurrences(of: "%@", with: commit.hash)) {
-                                    updateToRevision(commit.hash)
-                                }
-                                Button(L("Revert Changes from Revision r\(commit.hash)…", "撤销此修订的更改 (r\(commit.hash))…")) {
-                                    revertRevisionChanges(commit.hash)
-                                }
-                                Button(L("Edit Log Message…", "编辑日志信息…")) {
-                                    editingCommit = commit
-                                }
-                                Divider()
-                                Button(L("Compare with Working Copy", "与工作副本对比")) {
-                                    AppContainer.shared.windowCoordinator.openCompareRevisions(
-                                        repoPath: repoPath,
-                                        rev1: commit.hash,
-                                        rev2: "HEAD"
-                                    )
-                                }
-                                Button(L("Compare with Previous Revision", "与前一修订对比")) {
-                                    if let num = Int(commit.hash), num > 1 {
-                                        AppContainer.shared.windowCoordinator.openCompareRevisions(
-                                            repoPath: repoPath,
-                                            rev1: String(num - 1),
-                                            rev2: commit.hash
-                                        )
-                                    }
-                                }
-                                Button(L("Browse Repository at r\(commit.hash)", "在 r\(commit.hash) 浏览版本库")) {
-                                    AppContainer.shared.windowCoordinator.openRepoBrowser(repoPath: repoPath, revision: commit.hash)
-                                }
-                                Button(L("Copy Revision Number", "拷贝版本号")) {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(commit.hash, forType: .string)
-                                }
-                            }
+                        )
+                        .onChange(of: selectedCommitID) { _ in
+                            scheduleDetailRefresh()
                         }
                     }
 
@@ -934,102 +908,15 @@ struct SvnLogWindowView: View {
                 }
                 .frame(minHeight: 240)
 
-                // Detail bottom split
-                if let commit = commits.first(where: { $0.id == selectedCommitID }) {
-                    VSplitView {
-                        VStack(spacing: 0) {
-                            HStack(spacing: 8) {
-                                Text(commit.shortHash)
-                                    .font(.caption.monospaced().weight(.semibold))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.accentColor.opacity(0.12))
-                                    .foregroundColor(.accentColor)
-                                    .cornerRadius(4)
-                                Text(commit.author)
-                                    .font(.system(size: 12, weight: .semibold))
-                                Text("·")
-                                    .foregroundColor(.secondary)
-                                Text(commit.date.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button(L("Edit Log Message…", "编辑日志信息…")) {
-                                    editingCommit = commit
-                                }
-                                .controlSize(.small)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.65))
-
-                            Divider()
-
-                            ScrollView {
-                                Text(commit.body.isEmpty ? commit.subject : "\(commit.subject)\n\(commit.body)")
-                                    .font(.system(size: 12.5))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                            }
-                            .background(Color(nsColor: .textBackgroundColor))
-                        }
-                        .frame(minHeight: 90)
-
-                        VStack(spacing: 0) {
-                            TableColumnHeaderBar(
-                                columns: [
-                                    TableColumnSpec("", width: 24, alignment: .center),
-                                    TableColumnSpec(L("Path", "路径"))
-                                ],
-                                horizontalPadding: 12,
-                                spacing: 8
-                            )
-
-                            List(commit.changedPaths) { ch in
-                                HStack(spacing: 8) {
-                                    VcsActionBadge(action: ch.action)
-                                        .frame(width: 24)
-                                    FileTypeIconView(path: ch.path)
-                                    Text(ch.path)
-                                        .font(.system(size: 12.5))
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    if let cp = ch.copyFromPath, !cp.isEmpty {
-                                        Text("← \(cp)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                    }
-                                }
-                                .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                                .contentShape(Rectangle())
-                                .onTapGesture(count: 2) {
-                                    diffChangedPath(ch, revision: commit.hash)
-                                }
-                                .contextMenu {
-                                    Button(L("Diff against previous revision", "与前一版本对比")) {
-                                        diffChangedPath(ch, revision: commit.hash)
-                                    }
-                                    Button(L("Blame at r\(commit.hash)", "在 r\(commit.hash) 追溯")) {
-                                        AppContainer.shared.windowCoordinator.openBlameResult(
-                                            repoPath: repoPath,
-                                            filePath: ch.path,
-                                            revision: commit.hash,
-                                            ignoreWhitespace: false,
-                                            hideAuthorAndDate: false
-                                        )
-                                    }
-                                }
-                            }
-                            .listStyle(.inset)
-                            .environment(\.defaultMinListRowHeight, 22)
-                        }
-                        .frame(minHeight: 120)
-                    }
+                // Detail bottom split (decoupled from row highlight)
+                if let commit = activeCommit {
+                    SvnLogDetailSection(
+                        repoPath: repoPath,
+                        commit: commit,
+                        onEditMessage: { editingCommit = commit },
+                        onDiffChangedPath: { ch in diffChangedPath(ch, revision: commit.hash) }
+                    )
+                    .equatable()
                 } else {
                     EmptyStateBox(
                         systemImage: "doc.plaintext",
@@ -1040,12 +927,19 @@ struct SvnLogWindowView: View {
             }
         }
         .onAppear { loadInitial() }
+        .onDisappear {
+            detailUpdateTask?.cancel()
+            detailUpdateTask = nil
+            loadTask?.cancel()
+            loadTask = nil
+        }
         .sheet(item: $editingCommit) { commit in
             SvnEditLogMessageSheet(repoPath: repoPath, commit: commit) { newMsg in
                 if let idx = commits.firstIndex(where: { $0.id == commit.id }) {
                     let lines = newMsg.components(separatedBy: .newlines)
                     commits[idx].subject = lines.first ?? ""
                     commits[idx].body = lines.dropFirst().joined(separator: "\n")
+                    commitIndexByID[commit.id] = commits[idx]
                 }
                 editingCommit = nil
             } onCancel: {
@@ -1067,13 +961,31 @@ struct SvnLogWindowView: View {
         }
     }
 
+    private func scheduleDetailRefresh() {
+        let targetID = targetSelectedCommitID
+        detailUpdateTask?.cancel()
+        guard targetID != displayedCommitID else {
+            detailUpdateTask = nil
+            return
+        }
+        detailUpdateTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 30_000_000)
+            guard !Task.isCancelled else { return }
+            displayedCommitID = targetID
+            detailUpdateTask = nil
+        }
+    }
+
     private func loadInitial() {
+        loadTask?.cancel()
         isLoading = true
         let target = targetPathFilter.isEmpty ? "." : targetPathFilter
         let limit = pageSize()
         let revRange = revisionRange.trimmingCharacters(in: .whitespacesAndNewlines)
-        Task {
-            defer { isLoading = false }
+        loadTask = Task {
+            defer {
+                if !Task.isCancelled { isLoading = false }
+            }
             do {
                 let res = try await AppContainer.shared.runSvnInteractive(repoPath: repoPath) { env, auth in
                     try await AppContainer.shared.svnProvider.svnLog(
@@ -1088,11 +1000,19 @@ struct SvnLogWindowView: View {
                         auth: auth
                     )
                 }
+                guard !Task.isCancelled else { return }
+                detailUpdateTask?.cancel()
+                detailUpdateTask = nil
+                let index = Dictionary(res.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
                 self.commits = res
+                self.commitIndexByID = index
                 self.canLoadMore = res.count >= limit
-                if selectedCommitID == nil { selectedCommitID = res.first?.id }
+                if selectedCommitID == nil || index[selectedCommitID ?? ""] == nil {
+                    selectedCommitID = res.first?.id
+                }
+                displayedCommitID = targetSelectedCommitID
             } catch {
-                AlertHelper.showError(error)
+                if !Task.isCancelled { AlertHelper.showError(error) }
             }
         }
     }
@@ -1102,12 +1022,15 @@ struct SvnLogWindowView: View {
             canLoadMore = false
             return
         }
+        loadTask?.cancel()
         isLoading = true
         let limit = pageSize()
         let target = targetPathFilter.isEmpty ? "." : targetPathFilter
         let range = "\(lastRev - 1):1"
-        Task {
-            defer { isLoading = false }
+        loadTask = Task {
+            defer {
+                if !Task.isCancelled { isLoading = false }
+            }
             do {
                 let next = try await AppContainer.shared.runSvnInteractive(repoPath: repoPath) { env, auth in
                     try await AppContainer.shared.svnProvider.svnLog(
@@ -1122,12 +1045,16 @@ struct SvnLogWindowView: View {
                         auth: auth
                     )
                 }
+                guard !Task.isCancelled else { return }
                 let existingIDs = Set(commits.map(\.id))
                 let appended = next.filter { !existingIDs.contains($0.id) }
                 self.commits.append(contentsOf: appended)
+                for item in appended {
+                    self.commitIndexByID[item.id] = item
+                }
                 self.canLoadMore = next.count >= limit
             } catch {
-                AlertHelper.showError(error)
+                if !Task.isCancelled { AlertHelper.showError(error) }
             }
         }
     }
@@ -1170,6 +1097,43 @@ struct SvnLogWindowView: View {
         }
     }
 
+    private func populateSvnLogContextMenu(_ menu: NSMenu, commit: VcsCommit) {
+        menu.addItem(ClosureMenuItem(title: L("Update Working Copy to Revision %@", "更新工作副本至 r%@")
+            .replacingOccurrences(of: "%@", with: commit.hash)) {
+            updateToRevision(commit.hash)
+        })
+        menu.addItem(ClosureMenuItem(title: L("Revert Changes from Revision r\(commit.hash)…", "撤销此修订的更改 (r\(commit.hash))…")) {
+            revertRevisionChanges(commit.hash)
+        })
+        menu.addItem(ClosureMenuItem(title: L("Edit Log Message…", "编辑日志信息…")) {
+            editingCommit = commit
+        })
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem(title: L("Compare with Working Copy", "与工作副本对比")) {
+            AppContainer.shared.windowCoordinator.openCompareRevisions(
+                repoPath: repoPath,
+                rev1: commit.hash,
+                rev2: "HEAD"
+            )
+        })
+        menu.addItem(ClosureMenuItem(title: L("Compare with Previous Revision", "与前一修订对比")) {
+            if let num = Int(commit.hash), num > 1 {
+                AppContainer.shared.windowCoordinator.openCompareRevisions(
+                    repoPath: repoPath,
+                    rev1: String(num - 1),
+                    rev2: commit.hash
+                )
+            }
+        })
+        menu.addItem(ClosureMenuItem(title: L("Browse Repository at r\(commit.hash)", "在 r\(commit.hash) 浏览版本库")) {
+            AppContainer.shared.windowCoordinator.openRepoBrowser(repoPath: repoPath, revision: commit.hash)
+        })
+        menu.addItem(ClosureMenuItem(title: L("Copy Revision Number", "拷贝版本号")) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(commit.hash, forType: .string)
+        })
+    }
+
     private func diffChangedPath(_ ch: VcsChangedPath, revision: String) {
         guard let revNum = Int(revision), revNum > 1 else { return }
         Task {
@@ -1186,6 +1150,120 @@ struct SvnLogWindowView: View {
                 )
             } catch {
                 AlertHelper.showError(error)
+            }
+        }
+    }
+}
+
+private struct SvnLogDetailSection: View, Equatable {
+    let repoPath: String
+    let commit: VcsCommit
+    let onEditMessage: () -> Void
+    let onDiffChangedPath: (VcsChangedPath) -> Void
+
+    @State private var selectedPathID: String?
+
+    static func == (lhs: SvnLogDetailSection, rhs: SvnLogDetailSection) -> Bool {
+        lhs.repoPath == rhs.repoPath && lhs.commit == rhs.commit
+    }
+
+    var body: some View {
+        VSplitView {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Text(commit.shortHash)
+                        .font(.caption.monospaced().weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(4)
+                    Text(commit.author)
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("·")
+                        .foregroundColor(.secondary)
+                    Text(SharedDateFormatters.abbreviatedDateTime.string(from: commit.date))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button(L("Edit Log Message…", "编辑日志信息…")) {
+                        onEditMessage()
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.65))
+
+                Divider()
+
+                ScrollView {
+                    Text(commit.body.isEmpty ? commit.subject : "\(commit.subject)\n\(commit.body)")
+                        .font(.system(size: 12.5))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                }
+                .background(Color(nsColor: .textBackgroundColor))
+            }
+            .frame(minHeight: 90)
+
+            VStack(spacing: 0) {
+                TableColumnHeaderBar(
+                    columns: [
+                        TableColumnSpec("", width: 24, alignment: .center),
+                        TableColumnSpec(L("Path", "路径"))
+                    ],
+                    horizontalPadding: 12,
+                    spacing: 8
+                )
+
+                List(commit.changedPaths, selection: $selectedPathID) { ch in
+                    HStack(spacing: 8) {
+                        VcsActionBadge(action: ch.action)
+                            .frame(width: 24)
+                        FileTypeIconView(path: ch.path)
+                        Text(ch.path)
+                            .font(.system(size: 12.5))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let cp = ch.copyFromPath, !cp.isEmpty {
+                            Text("← \(cp)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    .tag(ch.id)
+                    .contentShape(Rectangle())
+                    .onListRowDoubleClick {
+                        onDiffChangedPath(ch)
+                    }
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                    .contextMenu {
+                        Button(L("Diff against previous revision", "与前一版本对比")) {
+                            onDiffChangedPath(ch)
+                        }
+                        Button(L("Blame at r\(commit.hash)", "在 r\(commit.hash) 追溯")) {
+                            AppContainer.shared.windowCoordinator.openBlameResult(
+                                repoPath: repoPath,
+                                filePath: ch.path,
+                                revision: commit.hash,
+                                ignoreWhitespace: false,
+                                hideAuthorAndDate: false
+                            )
+                        }
+                    }
+                }
+                .listStyle(.inset)
+                .environment(\.defaultMinListRowHeight, 22)
+            }
+            .frame(minHeight: 120)
+            .onChange(of: commit.id) { _ in
+                selectedPathID = nil
             }
         }
     }

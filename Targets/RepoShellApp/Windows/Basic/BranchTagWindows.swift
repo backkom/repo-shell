@@ -319,21 +319,12 @@ struct ReferencesWindowView: View {
     let repoPath: String
 
     @State private var references: [GitReference] = []
+    @State private var filteredReferences: [GitReference] = []
     @State private var filterKind: GitReferenceKind? = nil
     @State private var searchText: String = ""
     @State private var selection: Set<String> = []
     @State private var renameTarget: GitReference?
     @State private var renameText: String = ""
-
-    private var filtered: [GitReference] {
-        let byKind = filterKind == nil ? references : references.filter { $0.kind == filterKind }
-        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return byKind }
-        return byKind.filter {
-            $0.shortName.localizedCaseInsensitiveContains(q)
-            || $0.lastCommitSubject.localizedCaseInsensitiveContains(q)
-        }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -383,49 +374,12 @@ struct ReferencesWindowView: View {
                 spacing: 8
             )
 
-            List(filtered, selection: $selection) { ref in
-                HStack(spacing: 8) {
-                    Image(systemName: icon(for: ref.kind))
-                        .foregroundColor(ref.isCurrent ? .green : .secondary)
-                    Text(ref.shortName)
-                        .font(.system(size: 12.5, weight: ref.isCurrent ? .semibold : .regular))
-                    if ref.isCurrent {
-                        Text("HEAD")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.green.opacity(0.16))
-                            .foregroundColor(.green)
-                            .cornerRadius(3)
-                    }
-                    if let upstream = ref.upstream {
-                        Text("→ \(upstream)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    if let ab = ref.aheadBehind, !ab.isEmpty {
-                        Text(ab)
-                            .font(.caption2.monospacedDigit())
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.accentColor.opacity(0.12))
-                            .foregroundColor(.accentColor)
-                            .cornerRadius(3)
-                    }
-                    Spacer()
-                    Text(ref.lastCommitSubject)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .frame(width: 240, alignment: .trailing)
-                    Text(String(ref.objectHash.prefix(7)))
-                        .font(.caption.monospaced())
-                        .foregroundColor(.secondary)
-                        .frame(width: 64, alignment: .trailing)
-                }
-                .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                .tag(ref.id)
-                .contextMenu {
+            List(filteredReferences, selection: $selection) { ref in
+                ReferenceRowView(ref: ref)
+                    .equatable()
+                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                    .tag(ref.id)
+                    .contextMenu {
                     Button(L("Checkout", "签出")) {
                         Task {
                             _ = try? await AppContainer.shared.gitProvider.checkout(repoPath: repoPath, target: ref.shortName)
@@ -509,18 +463,80 @@ struct ReferencesWindowView: View {
             .padding(20)
             .frame(width: 340)
         }
+        .onChange(of: filterKind) { _ in recomputeFiltered() }
+        .onChange(of: searchText) { _ in recomputeFiltered() }
         .task { await reload() }
     }
 
-    private func icon(for kind: GitReferenceKind) -> String {
-        switch kind {
-        case .localBranch: return "arrow.triangle.branch"
-        case .remoteBranch: return "cloud"
-        case .tag: return "tag"
+    private func recomputeFiltered() {
+        let byKind = filterKind == nil ? references : references.filter { $0.kind == filterKind }
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else {
+            filteredReferences = byKind
+            return
+        }
+        filteredReferences = byKind.filter {
+            $0.shortName.localizedCaseInsensitiveContains(q)
+            || $0.lastCommitSubject.localizedCaseInsensitiveContains(q)
         }
     }
 
     private func reload() async {
         references = (try? await AppContainer.shared.gitProvider.listReferences(repoPath: repoPath)) ?? []
+        recomputeFiltered()
+    }
+}
+
+private struct ReferenceRowView: View, Equatable {
+    let ref: GitReference
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: Self.icon(for: ref.kind))
+                .foregroundColor(ref.isCurrent ? .green : .secondary)
+            Text(ref.shortName)
+                .font(.system(size: 12.5, weight: ref.isCurrent ? .semibold : .regular))
+            if ref.isCurrent {
+                Text("HEAD")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.green.opacity(0.16))
+                    .foregroundColor(.green)
+                    .cornerRadius(3)
+            }
+            if let upstream = ref.upstream {
+                Text("→ \(upstream)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            if let ab = ref.aheadBehind, !ab.isEmpty {
+                Text(ab)
+                    .font(.caption2.monospacedDigit())
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.accentColor.opacity(0.12))
+                    .foregroundColor(.accentColor)
+                    .cornerRadius(3)
+            }
+            Spacer()
+            Text(ref.lastCommitSubject)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .frame(width: 240, alignment: .trailing)
+            Text(String(ref.objectHash.prefix(7)))
+                .font(.caption.monospaced())
+                .foregroundColor(.secondary)
+                .frame(width: 64, alignment: .trailing)
+        }
+    }
+
+    private static func icon(for kind: GitReferenceKind) -> String {
+        switch kind {
+        case .localBranch: return "arrow.triangle.branch"
+        case .remoteBranch: return "cloud"
+        case .tag: return "tag"
+        }
     }
 }

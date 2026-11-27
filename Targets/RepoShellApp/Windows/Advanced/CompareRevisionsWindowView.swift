@@ -64,28 +64,16 @@ struct CompareRevisionsWindowView: View {
                 EmptyStateBox(systemImage: "doc.on.doc", title: L("No Differences Found", "两个版本间无差异"))
             } else {
                 List(diffs, selection: $selection) { item in
-                    HStack(spacing: 8) {
-                        VcsActionBadge(action: item.action)
-                            .frame(width: 24)
-                        FileTypeIconView(path: item.path)
-                        Text(item.path)
-                            .font(.system(size: 12.5))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if let add = item.additions, let del = item.deletions {
-                            DiffLineStatsBadge(additions: add, deletions: del)
-                                .frame(width: 92, alignment: .trailing)
+                    CompareRevisionRowView(item: item)
+                        .equatable()
+                        .contentShape(Rectangle())
+                        .onListRowDoubleClick {
+                            let abs = PathUtils.normalize("\(repoPath)/\(item.path)")
+                            AppContainer.shared.windowCoordinator.openDiffBetweenRevisions(repoPath: repoPath, filePath: abs, leftRev: rev1, rightRev: rev2)
                         }
-                    }
-                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                    .tag(item.path)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        let abs = PathUtils.normalize("\(repoPath)/\(item.path)")
-                        AppContainer.shared.windowCoordinator.openDiffBetweenRevisions(repoPath: repoPath, filePath: abs, leftRev: rev1, rightRev: rev2)
-                    }
-                    .contextMenu {
+                        .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                        .tag(item.path)
+                        .contextMenu {
                         Button(L("Diff", "比较")) {
                             let abs = PathUtils.normalize("\(repoPath)/\(item.path)")
                             AppContainer.shared.windowCoordinator.openDiffBetweenRevisions(repoPath: repoPath, filePath: abs, leftRev: rev1, rightRev: rev2)
@@ -137,6 +125,27 @@ struct CompareRevisionsWindowView: View {
             for file in selectedFiles {
                 let target = destFolder.appendingPathComponent(file.path)
                 try? await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: file.path, revision: rev2, to: target.path)
+            }
+        }
+    }
+}
+
+private struct CompareRevisionRowView: View, Equatable {
+    let item: VcsChangedPath
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VcsActionBadge(action: item.action)
+                .frame(width: 24)
+            FileTypeIconView(path: item.path)
+            Text(item.path)
+                .font(.system(size: 12.5))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let add = item.additions, let del = item.deletions {
+                DiffLineStatsBadge(additions: add, deletions: del)
+                    .frame(width: 92, alignment: .trailing)
             }
         }
     }

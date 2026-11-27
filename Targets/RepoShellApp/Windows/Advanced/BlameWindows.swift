@@ -58,20 +58,13 @@ struct BlameResultWindowView: View {
     var vcsType: VcsType = .git
 
     @State private var lines: [VcsBlameLine] = []
+    @State private var filteredLines: [VcsBlameLine] = []
+    @State private var lineIndexByID: [Int: VcsBlameLine] = [:]
     @State private var selectedLine: Int?
+    @State private var displayedLineID: Int?
+    @State private var detailUpdateTask: Task<Void, Never>?
     @State private var filterText: String = ""
     @State private var isLoading = false
-
-    private var filteredLines: [VcsBlameLine] {
-        let q = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return lines }
-        return lines.filter {
-            $0.content.localizedCaseInsensitiveContains(q)
-            || $0.author.localizedCaseInsensitiveContains(q)
-            || $0.shortHash.localizedCaseInsensitiveContains(q)
-            || $0.summary.localizedCaseInsensitiveContains(q)
-        }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -122,51 +115,13 @@ struct BlameResultWindowView: View {
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(filteredLines) { line in
-                            let commitColor = colorForHash(line.commitHash)
-                            let isSelected = selectedLine == line.id
-                            HStack(spacing: 8) {
-                                Text("\(line.lineNumber)")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 44, alignment: .trailing)
-
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(commitColor)
-                                        .frame(width: 6, height: 6)
-                                    Text(line.shortHash)
-                                        .font(.caption.monospaced())
-                                        .foregroundColor(commitColor)
-                                }
-                                .frame(width: 72, alignment: .leading)
-
-                                if !hideAuthorAndDate {
-                                    Text(line.author)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 100, alignment: .leading)
-                                        .lineLimit(1)
-                                    Text(line.date?.formatted(date: .numeric, time: .omitted) ?? "")
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 78, alignment: .leading)
-                                }
-
-                                Text(line.content)
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .textSelection(.enabled)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 2)
-                            .frame(minWidth: 700, alignment: .leading)
-                            .background(
-                                isSelected
-                                    ? Color.accentColor.opacity(0.18)
-                                    : (line.lineNumber % 2 == 0 ? Color(nsColor: .alternatingContentBackgroundColors.last ?? .controlBackgroundColor).opacity(0.45) : Color.clear)
+                            BlameLineRowView(
+                                line: line,
+                                isSelected: selectedLine == line.id,
+                                hideAuthorAndDate: hideAuthorAndDate
                             )
+                            .equatable()
                             .contentShape(Rectangle())
-                            .help("\(line.commitHash) • \(line.author)\n\(line.summary)")
                             .onTapGesture {
                                 selectedLine = line.id
                             }
@@ -194,6 +149,9 @@ struct BlameResultWindowView: View {
                     .padding(.vertical, 4)
                 }
                 .background(Color(nsColor: .textBackgroundColor))
+                .onChange(of: selectedLine) { newVal in
+                    scheduleFooterDetailUpdate(for: newVal)
+                }
             }
 
             Divider()
@@ -202,7 +160,7 @@ struct BlameResultWindowView: View {
                 Text(String(format: L("%d lines", "共 %d 行"), filteredLines.count))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
-                if let sel = selectedLine, let found = lines.first(where: { $0.id == sel }) {
+                if let sel = displayedLineID, let found = lineIndexByID[sel] {
                     Text("·")
                         .foregroundColor(.secondary)
                     Text("\(found.shortHash) — \(found.author): \(found.summary)")
@@ -217,12 +175,20 @@ struct BlameResultWindowView: View {
             .padding(.vertical, 6)
             .background(Color(nsColor: .windowBackgroundColor))
         }
+        .onChange(of: filterText) { _ in
+            recomputeFilteredLines()
+        }
+        .onDisappear {
+            detailUpdateTask?.cancel()
+            detailUpdateTask = nil
+        }
         .task {
             isLoading = true
             defer { isLoading = false }
             do {
+                let loaded: [VcsBlameLine]
                 if vcsType == .svn {
-                    lines = try await AppContainer.shared.runSvnInteractive(repoPath: repoPath) { env, auth in
+                    loaded = try await AppContainer.shared.runSvnInteractive(repoPath: repoPath) { env, auth in
                         try await AppContainer.shared.svnProvider.svnBlame(
                             repoPath: repoPath,
                             target: filePath,
@@ -233,16 +199,47 @@ struct BlameResultWindowView: View {
                         )
                     }
                 } else {
-                    lines = try await AppContainer.shared.gitProvider.blame(
+                    loaded = try await AppContainer.shared.gitProvider.blame(
                         repoPath: repoPath,
                         path: filePath,
                         revision: revision,
                         ignoreWhitespace: ignoreWhitespace
                     )
                 }
+                lines = loaded
+                lineIndexByID = Dictionary(loaded.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                recomputeFilteredLines()
             } catch {
                 AlertHelper.showError(error)
             }
+        }
+    }
+
+    private func recomputeFilteredLines() {
+        let q = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else {
+            filteredLines = lines
+            return
+        }
+        filteredLines = lines.filter {
+            $0.content.localizedCaseInsensitiveContains(q)
+            || $0.author.localizedCaseInsensitiveContains(q)
+            || $0.shortHash.localizedCaseInsensitiveContains(q)
+            || $0.summary.localizedCaseInsensitiveContains(q)
+        }
+    }
+
+    private func scheduleFooterDetailUpdate(for lineID: Int?) {
+        detailUpdateTask?.cancel()
+        guard lineID != displayedLineID else {
+            detailUpdateTask = nil
+            return
+        }
+        detailUpdateTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 25_000_000)
+            guard !Task.isCancelled else { return }
+            displayedLineID = lineID
+            detailUpdateTask = nil
         }
     }
 
@@ -258,8 +255,60 @@ struct BlameResultWindowView: View {
         cols.append(TableColumnSpec(L("Code", "代码")))
         return cols
     }
+}
 
-    private func colorForHash(_ hash: String) -> Color {
+private struct BlameLineRowView: View, Equatable {
+    let line: VcsBlameLine
+    let isSelected: Bool
+    let hideAuthorAndDate: Bool
+
+    var body: some View {
+        let commitColor = Self.colorForHash(line.commitHash)
+        HStack(spacing: 8) {
+            Text("\(line.lineNumber)")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 44, alignment: .trailing)
+
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(commitColor)
+                    .frame(width: 6, height: 6)
+                Text(line.shortHash)
+                    .font(.caption.monospaced())
+                    .foregroundColor(commitColor)
+            }
+            .frame(width: 72, alignment: .leading)
+
+            if !hideAuthorAndDate {
+                Text(line.author)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 100, alignment: .leading)
+                    .lineLimit(1)
+                Text(line.date.map { SharedDateFormatters.numericDateOnly.string(from: $0) } ?? "")
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .frame(width: 78, alignment: .leading)
+            }
+
+            Text(line.content)
+                .font(.system(size: 12, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: false)
+                .textSelection(.enabled)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
+        .frame(minWidth: 700, alignment: .leading)
+        .background(
+            isSelected
+                ? Color.accentColor.opacity(0.18)
+                : (line.lineNumber % 2 == 0 ? Color(nsColor: .alternatingContentBackgroundColors.last ?? .controlBackgroundColor).opacity(0.45) : Color.clear)
+        )
+        .help("\(line.commitHash) • \(line.author)\n\(line.summary)")
+    }
+
+    private static func colorForHash(_ hash: String) -> Color {
         let colors: [Color] = [.blue, .purple, .orange, .teal, .pink, .indigo, .green]
         let val = hash.unicodeScalars.reduce(0) { $0 + Int($1.value) }
         return colors[val % colors.count]

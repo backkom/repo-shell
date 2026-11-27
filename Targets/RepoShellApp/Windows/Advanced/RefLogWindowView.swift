@@ -49,31 +49,11 @@ struct RefLogWindowView: View {
                 EmptyStateBox(systemImage: "list.bullet.rectangle", title: L("No RefLog Entries", "无操作日志"))
             } else {
                 List(entries, selection: $selection) { entry in
-                    HStack(spacing: 10) {
-                        Text(entry.selector)
-                            .font(.caption.monospaced())
-                            .foregroundColor(.accentColor)
-                            .frame(width: 85, alignment: .leading)
-                        Text(entry.shortHash)
-                            .font(.caption.monospaced())
-                            .foregroundColor(.secondary)
-                            .frame(width: 68, alignment: .leading)
-                        Text(entry.actionSummary)
-                            .font(.caption.weight(.semibold))
-                            .frame(width: 110, alignment: .leading)
-                            .lineLimit(1)
-                        Text(entry.message)
-                            .font(.system(size: 12.5))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(entry.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
-                            .frame(width: 135, alignment: .trailing)
-                    }
-                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                    .tag(entry.id)
-                    .contextMenu {
+                    RefLogRowView(entry: entry)
+                        .equatable()
+                        .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                        .tag(entry.id)
+                        .contextMenu {
                         let picked = entries.filter { selection.contains($0.id) }
                         if picked.count == 2 {
                             Button(L("Compare Two Versions", "比较两个版本")) {
@@ -164,5 +144,34 @@ struct RefLogWindowView: View {
         isLoading = true
         defer { isLoading = false }
         entries = (try? await AppContainer.shared.gitProvider.reflog(repoPath: repoPath, ref: selectedRef, limit: 200)) ?? []
+    }
+}
+
+private struct RefLogRowView: View, Equatable {
+    let entry: GitRefLogEntry
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(entry.selector)
+                .font(.caption.monospaced())
+                .foregroundColor(.accentColor)
+                .frame(width: 85, alignment: .leading)
+            Text(entry.shortHash)
+                .font(.caption.monospaced())
+                .foregroundColor(.secondary)
+                .frame(width: 68, alignment: .leading)
+            Text(entry.actionSummary)
+                .font(.caption.weight(.semibold))
+                .frame(width: 110, alignment: .leading)
+                .lineLimit(1)
+            Text(entry.message)
+                .font(.system(size: 12.5))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(SharedDateFormatters.abbreviatedDateTime.string(from: entry.date))
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 135, alignment: .trailing)
+        }
     }
 }

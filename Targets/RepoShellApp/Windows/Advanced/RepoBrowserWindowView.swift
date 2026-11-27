@@ -12,6 +12,7 @@ struct RepoBrowserWindowView: View {
     @State private var folderCache: [String: [VcsTreeEntry]] = [:]
     @State private var expandedFolders: Set<String> = [""]
     @State private var isLoading = false
+    @State private var reloadTask: Task<Void, Never>?
 
     init(repoPath: String, initialRevision: String = "HEAD") {
         self.repoPath = repoPath
@@ -28,7 +29,9 @@ struct RepoBrowserWindowView: View {
                     .frame(maxWidth: 320)
                     .onChange(of: revision) { _ in
                         folderCache = [:]
-                        Task { await reload() }
+                        selectedEntryID = nil
+                        entries = []
+                        startReload()
                     }
 
                 Spacer()
@@ -37,7 +40,7 @@ struct RepoBrowserWindowView: View {
                 }
                 Button {
                     folderCache = [:]
-                    Task { await reload() }
+                    startReload()
                 } label: {
                     if isLoading {
                         ProgressView().controlSize(.small).frame(width: 14, height: 14)
@@ -119,43 +122,19 @@ struct RepoBrowserWindowView: View {
                         EmptyStateBox(systemImage: "folder", title: L("Empty Directory", "空目录"))
                     } else {
                         List(entries, selection: $selectedEntryID) { entry in
-                            HStack(spacing: 10) {
-                                if entry.kind == .submodule {
-                                    Image(systemName: "shippingbox")
-                                        .foregroundColor(.teal)
-                                        .frame(width: 15, height: 15)
-                                } else {
-                                    FileTypeIconView(path: entry.name, isDirectory: entry.kind == .tree)
+                            GitRepoBrowserRowView(entry: entry)
+                                .equatable()
+                                .contentShape(Rectangle())
+                                .onListRowDoubleClick {
+                                    if entry.kind == .tree {
+                                        selectFolder(entry.path)
+                                    } else if entry.kind == .blob {
+                                        openFileInViewer(entry)
+                                    }
                                 }
-                                Text(entry.name)
-                                    .font(.system(size: 12.5))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text(entry.mode)
-                                    .font(.caption.monospaced())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 58, alignment: .leading)
-                                Text(String(entry.objectHash.prefix(8)))
-                                    .font(.caption.monospaced())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 72, alignment: .leading)
-                                Text(entry.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 76, alignment: .trailing)
-                            }
-                            .tag(entry.id)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
-                                if entry.kind == .tree {
-                                    selectFolder(entry.path)
-                                } else if entry.kind == .blob {
-                                    openFileInViewer(entry)
-                                }
-                            }
-                            .contextMenu {
+                                .tag(entry.id)
+                                .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                                .contextMenu {
                                 if entry.kind == .blob {
                                     Button(L("Open", "打开")) { openFileInViewer(entry) }
                                     Button(L("Save Revision As…", "保存版本至…")) { saveFileAs(entry) }
@@ -205,10 +184,18 @@ struct RepoBrowserWindowView: View {
                 }
             }
         }
-        .task { await reload() }
+        .task { startReload() }
+        .onDisappear {
+            reloadTask?.cancel()
+            reloadTask = nil
+        }
     }
 
     private func selectFolder(_ path: String) {
+        if currentFolderPath != path {
+            selectedEntryID = nil
+            entries = []
+        }
         currentFolderPath = path
         if !path.isEmpty {
             var accum = ""
@@ -218,7 +205,14 @@ struct RepoBrowserWindowView: View {
             }
         }
         expandedFolders.insert("")
-        Task { await reload() }
+        startReload()
+    }
+
+    private func startReload() {
+        reloadTask?.cancel()
+        reloadTask = Task {
+            await reload()
+        }
     }
 
     private func toggleExpand(_ path: String) {
@@ -240,13 +234,20 @@ struct RepoBrowserWindowView: View {
     }
 
     private func reload() async {
-        isLoading = true
-        defer { isLoading = false }
+        let targetFolder = currentFolderPath
         let rev = revision.isEmpty ? "HEAD" : revision
-        let list = (try? await AppContainer.shared.gitProvider.listDirectory(repoPath: repoPath, path: currentFolderPath, revision: rev)) ?? []
+        isLoading = true
+        defer {
+            if !Task.isCancelled && currentFolderPath == targetFolder {
+                isLoading = false
+            }
+        }
+        let list = (try? await AppContainer.shared.gitProvider.listDirectory(repoPath: repoPath, path: targetFolder, revision: rev)) ?? []
+        let activeRev = revision.isEmpty ? "HEAD" : revision
+        guard !Task.isCancelled, currentFolderPath == targetFolder, activeRev == rev else { return }
         let sorted = sortEntries(list)
         entries = sorted
-        folderCache[currentFolderPath] = sorted.filter { $0.kind == .tree }
+        folderCache[targetFolder] = sorted.filter { $0.kind == .tree }
     }
 
     private func sortEntries(_ list: [VcsTreeEntry]) -> [VcsTreeEntry] {
@@ -273,6 +274,39 @@ struct RepoBrowserWindowView: View {
             Task {
                 try? await AppContainer.shared.gitProvider.extractFile(repoPath: repoPath, path: entry.path, revision: revision, to: dest.path)
             }
+        }
+    }
+}
+
+private struct GitRepoBrowserRowView: View, Equatable {
+    let entry: VcsTreeEntry
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if entry.kind == .submodule {
+                Image(systemName: "shippingbox")
+                    .foregroundColor(.teal)
+                    .frame(width: 15, height: 15)
+            } else {
+                FileTypeIconView(path: entry.name, isDirectory: entry.kind == .tree)
+            }
+            Text(entry.name)
+                .font(.system(size: 12.5))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(entry.mode)
+                .font(.caption.monospaced())
+                .foregroundColor(.secondary)
+                .frame(width: 58, alignment: .leading)
+            Text(String(entry.objectHash.prefix(8)))
+                .font(.caption.monospaced())
+                .foregroundColor(.secondary)
+                .frame(width: 72, alignment: .leading)
+            Text(entry.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 76, alignment: .trailing)
         }
     }
 }

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 public final class SharedStorage: @unchecked Sendable {
     public static let shared = SharedStorage()
@@ -6,6 +9,12 @@ public final class SharedStorage: @unchecked Sendable {
     public let baseDirectoryURL: URL
     private let fileManager = FileManager.default
     private let queue = DispatchQueue(label: "com.leaf.reposhell.sharedstorage", attributes: .concurrent)
+    private let configCacheLock = NSLock()
+    private var cachedConfig: SharedConfig?
+    private var cachedConfigMtimeSec: Int = 0
+    private var cachedConfigMtimeNsec: Int = 0
+    private var cachedConfigSize: off_t = -1
+    private var cachedConfigMissing: Bool = false
 
     private let encoder: JSONEncoder = {
         let enc = JSONEncoder()
@@ -96,18 +105,76 @@ public final class SharedStorage: @unchecked Sendable {
     // MARK: - Config
 
     public func loadConfig() -> SharedConfig {
-        queue.sync {
-            guard let data = try? Data(contentsOf: configURL),
-                  let config = try? decoder.decode(SharedConfig.self, from: data) else {
-                return SharedConfig()
+        var st = stat()
+        let statOK = stat(configURL.path, &st) == 0
+
+        configCacheLock.lock()
+        if let cachedConfig {
+            if statOK {
+                if !cachedConfigMissing,
+                   cachedConfigMtimeSec == st.st_mtimespec.tv_sec,
+                   cachedConfigMtimeNsec == st.st_mtimespec.tv_nsec,
+                   cachedConfigSize == st.st_size {
+                    configCacheLock.unlock()
+                    return cachedConfig
+                }
+            } else if cachedConfigMissing {
+                configCacheLock.unlock()
+                return cachedConfig
             }
-            return config
+        }
+        configCacheLock.unlock()
+
+        return queue.sync {
+            var latestStat = stat()
+            let latestOK = stat(configURL.path, &latestStat) == 0
+            let loaded: SharedConfig
+            let isMissing: Bool
+            if latestOK,
+               let data = try? Data(contentsOf: configURL),
+               let config = try? decoder.decode(SharedConfig.self, from: data) {
+                loaded = config
+                isMissing = false
+            } else {
+                loaded = SharedConfig()
+                isMissing = !latestOK
+            }
+
+            configCacheLock.lock()
+            cachedConfig = loaded
+            cachedConfigMissing = isMissing
+            if latestOK {
+                cachedConfigMtimeSec = latestStat.st_mtimespec.tv_sec
+                cachedConfigMtimeNsec = latestStat.st_mtimespec.tv_nsec
+                cachedConfigSize = latestStat.st_size
+            } else {
+                cachedConfigMtimeSec = 0
+                cachedConfigMtimeNsec = 0
+                cachedConfigSize = -1
+            }
+            configCacheLock.unlock()
+            return loaded
         }
     }
 
     public func saveConfig(_ config: SharedConfig) throws {
         try queue.sync(flags: .barrier) {
             try writeAtomic(config, to: configURL)
+            var st = stat()
+            let statOK = stat(configURL.path, &st) == 0
+            configCacheLock.lock()
+            cachedConfig = config
+            cachedConfigMissing = false
+            if statOK {
+                cachedConfigMtimeSec = st.st_mtimespec.tv_sec
+                cachedConfigMtimeNsec = st.st_mtimespec.tv_nsec
+                cachedConfigSize = st.st_size
+            } else {
+                cachedConfigMtimeSec = 0
+                cachedConfigMtimeNsec = 0
+                cachedConfigSize = -1
+            }
+            configCacheLock.unlock()
         }
     }
 
